@@ -1,194 +1,313 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Header from '../components/Header'
+import { useApp } from '../context/AppContext'
+import { useAsync, useToast } from '../hooks/useAsync'
+import { AppShell } from '../components/layout'
+import { Spinner, Empty, ErrorState, ToastContainer } from '../components/ui'
+import { CriteriaCard, ScorePanel, ProgressBar, EventoBanner } from '../components/data'
 import api from '../api'
 
 const CRITERIOS = [
-  { key: 'conformidad', label: 'Conformidad' },
-  { key: 'manejo_tatami', label: 'Manejo del tatami' },
-  { key: 'instrucciones', label: 'Instrucciones claras' },
-  { key: 'aplicacion_reglamento', label: 'Aplicación del reglamento' },
-  { key: 'presencia', label: 'Presencia' },
+  { key: 'conformidad',           label: 'Conformidad',               short: 'Conform.' },
+  { key: 'manejo_tatami',         label: 'Manejo del tatami',         short: 'Tatami'   },
+  { key: 'instrucciones',         label: 'Instrucciones claras',      short: 'Instruc.' },
+  { key: 'aplicacion_reglamento', label: 'Aplicación del reglamento', short: 'Reglam.'  },
+  { key: 'presencia',             label: 'Presencia',                 short: 'Presencia'},
 ]
 
 export default function Evaluar() {
-  const user = JSON.parse(localStorage.getItem('fepaka_user') || '{}')
+  const { user, isAdmin } = useApp()
+  const { toasts, toast } = useToast()
   const nav = useNavigate()
-  const [eventos, setEventos] = useState([])
-  const [eventoId, setEventoId] = useState(null)
+
+  const [eventoActivo, setEventoActivo] = useState(null)
   const [arbitros, setArbitros] = useState([])
-  const [idx, setIdx] = useState(0)
-  const [scores, setScores] = useState({}) // { arbitroId: { criterio: valor } }
-  const [guardados, setGuardados] = useState({})
-  const [notif, setNotif] = useState(null)
+  const [arbIdx, setArbIdx] = useState(0)
+  const [scores, setScores] = useState({})       // { arbId: { criterio: valor } }
+  const [comentarios, setComentarios] = useState({}) // { arbId: string }
+  const [guardados, setGuardados] = useState({})  // { arbId: bool }
   const [saving, setSaving] = useState(false)
+  const [loadingArbs, setLoadingArbs] = useState(false)
 
-  useEffect(() => { cargarEventos() }, [])
-  useEffect(() => { if (eventoId) cargarArbitros() }, [eventoId])
-  useEffect(() => { if (arbitros.length) cargarMiEval() }, [idx, arbitros])
+  // ── Cargar eventos disponibles ──
+  const { data: eventos, loading: loadingEventos, error: errorEventos } = useAsync(
+    () => api.get('/eventos').then(r => r.data), []
+  )
 
-  function mostrarNotif(msg, tipo='ok') { setNotif({msg,tipo}); setTimeout(()=>setNotif(null),3000) }
+  // ── Seleccionar evento del evaluador automáticamente ──
+  useEffect(() => {
+    if (!eventos?.length) return
+    const evDelUsuario = eventos.find(ev => ev.evaluadores?.includes(user.id)) || eventos[0]
+    setEventoActivo(evDelUsuario)
+  }, [eventos, user.id])
 
-  async function cargarEventos() {
-    try {
-      const { data } = await api.get('/eventos')
-      setEventos(data)
-      if (data.length) setEventoId(data[0].id)
-    } catch {}
-  }
+  // ── Cargar árbitros del evento activo ──
+  useEffect(() => {
+    if (!eventoActivo) return
+    setLoadingArbs(true)
+    setArbIdx(0)
+    api.get(`/arbitros/evento/${eventoActivo.id}`)
+      .then(r => setArbitros(r.data))
+      .catch(() => toast.error('Error al cargar árbitros'))
+      .finally(() => setLoadingArbs(false))
+  }, [eventoActivo?.id])
 
-  async function cargarArbitros() {
-    try { const { data } = await api.get(`/arbitros/evento/${eventoId}`); setArbitros(data); setIdx(0) } catch {}
-  }
+  // ── Cargar evaluación existente al cambiar árbitro ──
+  useEffect(() => {
+    const arb = arbitros[arbIdx]
+    if (!arb || !eventoActivo) return
+    if (guardados[arb.id] !== undefined) return // ya la tenemos en memoria
 
-  async function cargarMiEval() {
-    const arb = arbitros[idx]; if (!arb) return
-    try {
-      const { data } = await api.get(`/evaluaciones/mia/arbitro/${arb.id}/evento/${eventoId}`)
-      if (data) {
+    api.get(`/evaluaciones/mia/arbitro/${arb.id}/evento/${eventoActivo.id}`)
+      .then(r => {
+        if (!r.data) return
         const s = {}
-        CRITERIOS.forEach(c => { s[c.key] = data[c.key] ? parseFloat(data[c.key]) : 0 })
+        CRITERIOS.forEach(c => { s[c.key] = r.data[c.key] ? parseFloat(r.data[c.key]) : 0 })
         setScores(prev => ({ ...prev, [arb.id]: s }))
+        setComentarios(prev => ({ ...prev, [arb.id]: r.data.comentario || '' }))
         setGuardados(prev => ({ ...prev, [arb.id]: true }))
-      }
-    } catch {}
-  }
+      })
+      .catch(() => {})
+  }, [arbIdx, arbitros, eventoActivo?.id])
 
-  const arb = arbitros[idx]
+  // ── Árbitro actual ──
+  const arb = arbitros[arbIdx]
   const arbScores = arb ? (scores[arb.id] || {}) : {}
-  const todoCompleto = CRITERIOS.every(c => arbScores[c.key] > 0)
-  const promedio = todoCompleto
-    ? (CRITERIOS.reduce((s,c) => s + arbScores[c.key], 0) / 5).toFixed(2)
-    : null
-  const evaluadosCount = Object.keys(guardados).length
+  const arbComentario = arb ? (comentarios[arb.id] || '') : ''
+  const todoCompleto = CRITERIOS.every(c => (arbScores[c.key] || 0) > 0)
+  const evaluadosCount = arbitros.filter(a => guardados[a.id]).length
 
-  function setScore(criterio, valor) {
-    const v = parseFloat(valor)
-    setScores(prev => ({ ...prev, [arb.id]: { ...prev[arb.id], [criterio]: v } }))
-  }
+  // ── Handlers ──
+  const handleScore = useCallback((criterio, valor) => {
+    if (!arb) return
+    setScores(prev => ({
+      ...prev,
+      [arb.id]: { ...(prev[arb.id] || {}), [criterio]: valor }
+    }))
+  }, [arb])
 
-  function sliderStyle(val) {
-    const pct = val ? ((val - 1) / 4 * 100) : 0
-    return { background: `linear-gradient(to right, var(--red) ${pct}%, var(--border) ${pct}%)` }
-  }
+  const handleComentario = useCallback((val) => {
+    if (!arb) return
+    setComentarios(prev => ({ ...prev, [arb.id]: val }))
+  }, [arb])
 
-  async function guardar() {
-    if (!todoCompleto) return mostrarNotif('Evalúa los 5 criterios antes de guardar', 'err')
+  const handleGuardar = useCallback(async () => {
+    if (!todoCompleto) { toast.error('Evalúa los 5 criterios antes de guardar'); return }
     setSaving(true)
     try {
       await api.post('/evaluaciones', {
-        evento_id: eventoId,
+        evento_id: eventoActivo.id,
         arbitro_id: arb.id,
-        ...arbScores
+        ...arbScores,
+        comentario: arbComentario || null,
       })
       setGuardados(prev => ({ ...prev, [arb.id]: true }))
-      mostrarNotif(`✓ Evaluación de ${arb.nombre} guardada`)
-      setTimeout(() => { if (idx < arbitros.length - 1) setIdx(i => i + 1) }, 1500)
-    } catch(err) { mostrarNotif(err.response?.data?.error || 'Error al guardar', 'err') }
-    finally { setSaving(false) }
-  }
+      toast.success(`✓ Evaluación de ${arb.nombre} guardada`)
+      setTimeout(() => {
+        if (arbIdx < arbitros.length - 1) setArbIdx(i => i + 1)
+      }, 1200)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }, [todoCompleto, eventoActivo, arb, arbScores, arbComentario, arbIdx, arbitros.length])
 
-  if (!arb) return (
-    <div className="screen">
-      <Header showBack={user.rol==='admin'} />
-      <div className="app-body" style={{display:'flex',alignItems:'center',justifyContent:'center'}}>
-        <div style={{textAlign:'center',color:'var(--gray)'}}>
-          {eventos.length === 0 ? 'No hay eventos creados aún.' : 'No hay árbitros registrados en este evento.'}
-        </div>
-      </div>
+  const navArb = useCallback((dir) => {
+    setArbIdx(i => Math.max(0, Math.min(arbitros.length - 1, i + dir)))
+  }, [arbitros.length])
+
+  // ── Thumbnail del árbitro ──
+  const apiBase = (import.meta.env.VITE_API_URL || '').replace('/api', '')
+  const initials = arb?.nombre.split(' ').map(x => x[0]).join('').substring(0, 2).toUpperCase() || '??'
+
+  // ── Loading / Error states ──
+  if (loadingEventos) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Spinner size={36} />
     </div>
   )
 
-  const initials = arb.nombre.split(' ').map(x=>x[0]).join('').substring(0,2).toUpperCase()
-  const apiBase = (import.meta.env.VITE_API_URL || '').replace('/api','')
+  if (errorEventos) return (
+    <AppShell showBack={isAdmin}>
+      <ErrorState message={errorEventos} onRetry={() => window.location.reload()} />
+    </AppShell>
+  )
+
+  const tabs = isAdmin ? [
+    { id: 'evaluar', label: '▶ Evaluando', icon: null }
+  ] : []
 
   return (
-    <div className="screen">
-      <Header showBack={user.rol==='admin'} />
-      <div className="app-body">
-        {notif && <div className={`notif ${notif.tipo}`}>{notif.msg}</div>}
+    <AppShell showBack={isAdmin} onBack={() => nav('/admin')}>
+      <ToastContainer toasts={toasts} />
 
-        {/* Selector de evento */}
-        {eventos.length > 1 && (
-          <div style={{marginBottom:12}}>
-            <select value={eventoId||''} onChange={e=>setEventoId(Number(e.target.value))}
-              style={{padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',fontSize:13,fontFamily:'var(--font)'}}>
-              {eventos.map(ev=><option key={ev.id} value={ev.id}>{ev.nombre}</option>)}
-            </select>
-          </div>
-        )}
+      {/* Banner del evento activo */}
+      {eventoActivo && (
+        <EventoBanner
+          nombre={eventoActivo.nombre}
+          fecha={eventoActivo.fecha}
+          sede={eventoActivo.sede}
+        />
+      )}
 
-        {/* Barra de progreso */}
-        <div className="card" style={{padding:'12px 16px',marginBottom:14}}>
-          <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:'var(--gray)',marginBottom:6}}>
-            <span>Progreso de evaluación</span>
-            <span>{evaluadosCount} / {arbitros.length} árbitros evaluados</span>
-          </div>
-          <div className="progress-bar">
-            <div className="progress-fill" style={{width:`${arbitros.length ? evaluadosCount/arbitros.length*100 : 0}%`}} />
-          </div>
-        </div>
-
-        {/* Navegación árbitro */}
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'white',border:'1px solid var(--border)',borderRadius:12,padding:'10px 16px',marginBottom:14}}>
-          <button className="btn btn-secondary" style={{padding:'6px 12px'}} onClick={()=>setIdx(i=>Math.max(0,i-1))} disabled={idx===0}>←</button>
-          <div style={{display:'flex',alignItems:'center',gap:14}}>
-            {arb.foto_url
-              ? <img src={`${apiBase}${arb.foto_url}`} alt="" style={{width:52,height:52,borderRadius:10,objectFit:'cover',border:'1px solid var(--border)'}} />
-              : <div style={{width:52,height:52,borderRadius:10,background:'var(--light)',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'var(--font-display)',fontSize:18,color:'var(--gray2)'}}>{initials}</div>
-            }
-            <div>
-              <div style={{fontSize:15,fontWeight:600}}>{arb.nombre}</div>
-              <div style={{fontSize:12,color:'var(--gray)',marginTop:2}}>{arb.provincia} · {arb.licencia}</div>
-              <div style={{fontSize:11,color:'var(--gray2)',marginTop:1}}>{arb.club} · {arb.fepaka_id}</div>
-            </div>
-          </div>
-          <div style={{textAlign:'center'}}>
-            <div style={{fontSize:12,color:'var(--gray)'}}>{idx+1} / {arbitros.length}</div>
-            <div style={{fontSize:11,marginTop:3,color:guardados[arb.id]?'var(--green)':'var(--gray2)'}}>{guardados[arb.id]?'✓ Evaluado':'Sin evaluar'}</div>
-          </div>
-          <button className="btn btn-secondary" style={{padding:'6px 12px'}} onClick={()=>setIdx(i=>Math.min(arbitros.length-1,i+1))} disabled={idx===arbitros.length-1}>→</button>
-        </div>
-
-        {/* Promedio en vivo */}
-        <div className="prom-bar">
-          {CRITERIOS.map((c,i) => (
-            <div key={c.key} className="prom-item">
-              <div className="prom-label">{['Conform.','Tatami','Instruc.','Reglam.','Presencia'][i]}</div>
-              <div className="prom-val">{arbScores[c.key] ? arbScores[c.key].toFixed(1) : '—'}</div>
-            </div>
-          ))}
-          <div className="prom-total-box">
-            <div className="prom-label">Mi prom.</div>
-            <div className="prom-val">{promedio || '—'}</div>
-          </div>
-        </div>
-
-        {/* Criterios con slider */}
-        {CRITERIOS.map(c => {
-          const val = arbScores[c.key] || 0
-          return (
-            <div key={c.key} className="crit-card">
-              <div className="crit-top">
-                <span className="crit-name">{c.label}</span>
-                <span className={`crit-val-big${val?' filled':''}`}>{val ? val.toFixed(1) : '—'}</span>
-              </div>
-              <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <span style={{fontSize:11,color:'var(--gray2)',fontWeight:500}}>1.0</span>
-                <input type="range" className="crit-slider" min="10" max="50" step="1"
-                  value={val ? Math.round(val*10) : 10}
-                  style={sliderStyle(val)}
-                  onChange={e => setScore(c.key, parseInt(e.target.value)/10)} />
-                <span style={{fontSize:11,color:'var(--gray2)',fontWeight:500}}>5.0</span>
-              </div>
-            </div>
-          )
-        })}
-
-        <button className="btn btn-green" style={{width:'100%',padding:12,fontSize:14}} onClick={guardar} disabled={saving}>
-          {saving ? 'Guardando...' : 'Guardar y continuar →'}
-        </button>
+      {/* Barra de progreso general */}
+      <div style={{
+        background: 'white', border: '1px solid var(--border)',
+        borderRadius: 12, padding: '12px 16px', marginBottom: 14,
+      }}>
+        <ProgressBar
+          value={evaluadosCount}
+          max={arbitros.length || 1}
+          label="Progreso de evaluación"
+          sublabel={`${evaluadosCount} / ${arbitros.length} árbitros evaluados`}
+        />
       </div>
-    </div>
+
+      {/* Loading árbitros */}
+      {loadingArbs && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+          <Spinner size={28} />
+        </div>
+      )}
+
+      {/* Sin árbitros */}
+      {!loadingArbs && arbitros.length === 0 && (
+        <Empty
+          icon="🥋"
+          title="Sin árbitros asignados"
+          description="El administrador debe asignar árbitros a este evento antes de evaluar."
+        />
+      )}
+
+      {/* Panel de evaluación */}
+      {!loadingArbs && arb && (
+        <>
+          {/* Navegación árbitro */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: 'white', border: '1px solid var(--border)',
+            borderRadius: 12, padding: '10px 16px', marginBottom: 14,
+          }}>
+            <button
+              onClick={() => navArb(-1)} disabled={arbIdx === 0}
+              style={navBtnStyle(arbIdx === 0)}
+              aria-label="Árbitro anterior"
+            >←</button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              {/* Foto o iniciales */}
+              <div style={{
+                width: 52, height: 52, borderRadius: 10, flexShrink: 0,
+                background: 'var(--light)', border: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden',
+              }}>
+                {arb.foto_url
+                  ? <img src={`${apiBase}${arb.foto_url}`} alt={arb.nombre}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--gray2)' }}>{initials}</span>
+                }
+              </div>
+
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--dark)' }}>{arb.nombre}</div>
+                <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 2 }}>{arb.provincia} · {arb.licencia}</div>
+                <div style={{ fontSize: 11, color: 'var(--gray2)', marginTop: 1 }}>{arb.club} · {arb.fepaka_id}</div>
+              </div>
+            </div>
+
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 12, color: 'var(--gray)' }}>{arbIdx + 1} / {arbitros.length}</div>
+              <div style={{
+                fontSize: 11, marginTop: 3, fontWeight: 500,
+                color: guardados[arb.id] ? 'var(--green)' : 'var(--gray2)',
+              }}>
+                {guardados[arb.id] ? '✓ Evaluado' : 'Sin evaluar'}
+              </div>
+            </div>
+
+            <button
+              onClick={() => navArb(1)} disabled={arbIdx === arbitros.length - 1}
+              style={navBtnStyle(arbIdx === arbitros.length - 1)}
+              aria-label="Árbitro siguiente"
+            >→</button>
+          </div>
+
+          {/* Promedios en tiempo real */}
+          <ScorePanel scores={arbScores} criterios={CRITERIOS} />
+
+          {/* Criterios */}
+          {CRITERIOS.map(c => (
+            <CriteriaCard
+              key={c.key}
+              label={c.label}
+              value={arbScores[c.key] || 0}
+              onChange={val => handleScore(c.key, val)}
+              disabled={saving}
+            />
+          ))}
+
+          {/* Comentarios */}
+          <div style={{
+            background: 'white', border: '1px solid var(--border)',
+            borderRadius: 12, padding: '14px 18px', marginBottom: 12,
+          }}>
+            <div style={{
+              fontSize: 11, fontWeight: 500, color: 'var(--gray)',
+              textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 8,
+            }}>
+              Comentarios{' '}
+              <span style={{ fontWeight: 400, color: 'var(--gray2)' }}>(opcional)</span>
+            </div>
+            <textarea
+              value={arbComentario}
+              onChange={e => handleComentario(e.target.value)}
+              placeholder="Observaciones adicionales sobre el desempeño del árbitro..."
+              rows={3}
+              disabled={saving}
+              style={{
+                width: '100%', padding: '10px 12px',
+                border: '1px solid var(--border)', borderRadius: 8,
+                fontSize: 13, fontFamily: 'var(--font)', color: 'var(--dark)',
+                outline: 'none', resize: 'vertical', lineHeight: 1.5,
+                transition: 'border 0.2s',
+              }}
+              onFocus={e => e.target.style.borderColor = 'var(--red)'}
+              onBlur={e => e.target.style.borderColor = 'var(--border)'}
+            />
+          </div>
+
+          {/* Botón guardar */}
+          <button
+            onClick={handleGuardar}
+            disabled={saving || !todoCompleto}
+            style={{
+              width: '100%', padding: '13px',
+              background: todoCompleto ? 'var(--green)' : 'var(--border)',
+              color: todoCompleto ? 'white' : 'var(--gray)',
+              border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600,
+              cursor: saving || !todoCompleto ? 'not-allowed' : 'pointer',
+              fontFamily: 'var(--font)', transition: 'all 0.2s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            {saving ? <Spinner size={16} color="white" /> : null}
+            {saving ? 'Guardando...' : todoCompleto ? 'Guardar y continuar →' : 'Completa los 5 criterios para guardar'}
+          </button>
+        </>
+      )}
+    </AppShell>
   )
+}
+
+function navBtnStyle(disabled) {
+  return {
+    width: 36, height: 36, borderRadius: 8,
+    border: '1px solid var(--border)', background: 'white',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize: 16, opacity: disabled ? 0.3 : 1,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all 0.15s', fontFamily: 'var(--font)',
+  }
 }
