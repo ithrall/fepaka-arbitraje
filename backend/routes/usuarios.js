@@ -27,7 +27,7 @@ router.post('/', authMiddleware, adminOnly, async (req, res) => {
   }
 });
 
-// POST importar usuarios desde CSV
+// POST importar CSV
 router.post('/csv', authMiddleware, adminOnly, async (req, res) => {
   try {
     const { usuarios } = req.body;
@@ -40,13 +40,24 @@ router.post('/csv', authMiddleware, adminOnly, async (req, res) => {
           [u.nombre, u.username, hash, u.rol || 'evaluador']
         );
         insertados.push(r.rows[0]);
-      } catch { /* usuario duplicado, se omite */ }
+      } catch { /* duplicado, se omite */ }
     }
     res.json({ insertados: insertados.length, usuarios: insertados });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT activar/desactivar usuario
+// PUT cambiar password (solo admin)
+router.put('/:id/password', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 4) return res.status(400).json({ error: 'El password debe tener al menos 4 caracteres' });
+    const hash = await bcrypt.hash(password, 10);
+    await pool.query('UPDATE usuarios SET password_hash=$1 WHERE id=$2', [hash, req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT activar/desactivar
 router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
   try {
     const { activo } = req.body;

@@ -5,7 +5,6 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Crear tablas si no existen
 async function initDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS usuarios (
@@ -25,13 +24,12 @@ async function initDB() {
       sede VARCHAR(100),
       num_evaluadores INT DEFAULT 4,
       estado VARCHAR(20) DEFAULT 'activo',
-      escudo_url VARCHAR(255),
       created_at TIMESTAMP DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS arbitros (
       id SERIAL PRIMARY KEY,
-      evento_id INT REFERENCES eventos(id) ON DELETE CASCADE,
+      evento_id INT REFERENCES eventos(id) ON DELETE SET NULL,
       nombre VARCHAR(100) NOT NULL,
       provincia VARCHAR(80),
       club VARCHAR(100),
@@ -39,6 +37,18 @@ async function initDB() {
       licencia VARCHAR(30),
       foto_url VARCHAR(255),
       created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS evento_arbitros (
+      evento_id INT REFERENCES eventos(id) ON DELETE CASCADE,
+      arbitro_id INT REFERENCES arbitros(id) ON DELETE CASCADE,
+      PRIMARY KEY (evento_id, arbitro_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS evento_evaluadores (
+      evento_id INT REFERENCES eventos(id) ON DELETE CASCADE,
+      usuario_id INT REFERENCES usuarios(id) ON DELETE CASCADE,
+      PRIMARY KEY (evento_id, usuario_id)
     );
 
     CREATE TABLE IF NOT EXISTS evaluaciones (
@@ -51,12 +61,12 @@ async function initDB() {
       instrucciones DECIMAL(3,1) CHECK (instrucciones BETWEEN 1.0 AND 5.0),
       aplicacion_reglamento DECIMAL(3,1) CHECK (aplicacion_reglamento BETWEEN 1.0 AND 5.0),
       presencia DECIMAL(3,1) CHECK (presencia BETWEEN 1.0 AND 5.0),
+      comentario TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(evento_id, arbitro_id, usuario_id)
     );
   `);
 
-  // Crear admin por defecto si no existe
   const bcrypt = require('bcryptjs');
   const exists = await pool.query("SELECT id FROM usuarios WHERE username = 'admin'");
   if (exists.rows.length === 0) {
@@ -65,12 +75,10 @@ async function initDB() {
       "INSERT INTO usuarios (nombre, username, password_hash, rol) VALUES ($1,$2,$3,$4)",
       ['Administrador', 'admin', hash, 'admin']
     );
-    console.log('Usuario admin creado por defecto (admin / admin123) — ¡cámbialo en producción!');
+    console.log('Usuario admin creado: admin / admin123');
   }
-
   console.log('Base de datos lista ✓');
 }
 
 initDB().catch(console.error);
-
 module.exports = pool;
