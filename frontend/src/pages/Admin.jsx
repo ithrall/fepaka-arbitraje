@@ -2,76 +2,131 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useAsync, useToast, useDebounce } from '../hooks/useAsync'
-import { AppShell, NavTabs, PageHeader } from '../components/layout'
-import { Button, Badge, Empty, ErrorState, ToastContainer, ScorePill, Skeleton } from '../components/ui'
-import { Field, Input, Select, FileDropZone } from '../components/forms'
-import { Card, StatCard, Table, ProgressBar, AssignItem } from '../components/data'
+import { AppShell, EventoBanner, PageHeader, CsvDropZone, EscudoUpload } from '../components/layout'
+import { Button, Badge, Empty, ErrorState, ToastContainer, ScorePill } from '../components/ui'
+import { Field, Input, Select } from '../components/forms'
+import { Card, StatCard, Table, ProgressBar, AssignItem, CriteriaCard, ScorePanel, EventoBanner as EvBanner } from '../components/data'
 import api from '../api'
 
 const LICENCIAS = ['Nacional A','Nacional B','Nacional C','Provincial A','Provincial B','Provincial C']
-
-const TABS = [
-  { id: 'eventos',   label: 'Eventos',          icon: '📅' },
-  { id: 'bd-arb',   label: 'Base Árbitros',     icon: '🥋' },
-  { id: 'bd-eval',  label: 'Base Evaluadores',  icon: '👤' },
-  { id: 'asignar',  label: 'Asignar a Evento',  icon: '🔗' },
-  { id: 'config',   label: 'Configuración',     icon: '⚙️' },
-  { id: 'resultados',label: 'Resultados',       icon: '📊' },
-  { id: 'evaluar',  label: '▶ Evaluar',         icon: null  },
+const CRITERIOS = [
+  { key: 'conformidad',           label: 'Conformidad',               short: 'Conform.' },
+  { key: 'manejo_tatami',         label: 'Manejo del tatami',         short: 'Tatami'   },
+  { key: 'instrucciones',         label: 'Instrucciones claras',      short: 'Instruc.' },
+  { key: 'aplicacion_reglamento', label: 'Aplicación del reglamento', short: 'Reglam.'  },
+  { key: 'presencia',             label: 'Presencia',                 short: 'Presencia'},
 ]
 
 export default function Admin() {
   const { config, updateConfig } = useApp()
   const { toasts, toast } = useToast()
   const nav = useNavigate()
-  const [tab, setTab] = useState('eventos')
+
+  // ── Navegación sidebar ──
+  const [activeEvento, setActiveEvento] = useState(null)
+  const [activeSub, setActiveSub] = useState(null)    // 'arb' | 'eval' | 'evaluar' | 'res'
+  const [activeGlobal, setActiveGlobal] = useState(null) // 'bd-arb' | 'bd-eval' | 'config'
+  const [showNewEvento, setShowNewEvento] = useState(false)
 
   // ── Datos globales ──
-  const { data: eventos, loading: loadingEventos, refresh: refreshEventos, error: errorEventos } =
+  const { data: eventos, loading: loadEvs, refresh: refreshEvs } =
     useAsync(() => api.get('/eventos').then(r => r.data), [])
-
-  const { data: bdArbitros, loading: loadingArbs, refresh: refreshArbs } =
+  const { data: bdArbitros, loading: loadArbs, refresh: refreshArbs } =
     useAsync(() => api.get('/arbitros/todos').then(r => r.data), [])
-
-  const { data: bdUsuarios, loading: loadingUsers, refresh: refreshUsers } =
+  const { data: bdUsuarios, loading: loadUsers, refresh: refreshUsers } =
     useAsync(() => api.get('/usuarios').then(r => r.data), [])
 
-  // ── Estado por tab ──
-  const [evActivo, setEvActivo] = useState(null)
-  const [evRes, setEvRes] = useState(null)
-  const [arbsAsig, setArbsAsig] = useState([])   // IDs asignados al evento
-  const [evalsAsig, setEvalsAsig] = useState([])  // IDs asignados al evento
+  // ── Estado de asignación ──
+  const [arbsAsig, setArbsAsig] = useState([])
+  const [evalsAsig, setEvalsAsig] = useState([])
+  const [loadingAsig, setLoadingAsig] = useState(false)
+
+  // ── Estado evaluación (modo admin evalúa) ──
+  const [arbIdx, setArbIdx] = useState(0)
+  const [scores, setScores] = useState({})
+  const [comentarios, setComentarios] = useState({})
+  const [guardados, setGuardados] = useState({})
+  const [saving, setSaving] = useState(false)
+
+  // ── Resultados ──
   const [resultados, setResultados] = useState([])
   const [detalle, setDetalle] = useState([])
   const [vistaRes, setVistaRes] = useState('resumen')
-  const [loadingAsig, setLoadingAsig] = useState(false)
+
+  // ── Password panel ──
   const [pwPanel, setPwPanel] = useState(null)
   const [pwNew, setPwNew] = useState('')
   const [pwConf, setPwConf] = useState('')
   const [pwErr, setPwErr] = useState('')
 
-  // ── Búsqueda con debounce ──
+  // ── Búsqueda ──
   const [busqArb, setBusqArb] = useState('')
   const [busqEval, setBusqEval] = useState('')
   const busqArbD = useDebounce(busqArb)
   const busqEvalD = useDebounce(busqEval)
 
-  // ── Seleccionar evento activo cuando cargan ──
+  // ── Cargar asignaciones cuando cambia evento/sub ──
   useEffect(() => {
-    if (eventos?.length && !evActivo) { setEvActivo(eventos[0]); setEvRes(eventos[0]) }
-  }, [eventos])
+    if (!activeEvento || activeSub !== 'arb' && activeSub !== 'eval') return
+    cargarAsignaciones(activeEvento.id)
+  }, [activeEvento?.id, activeSub])
 
-  // ── Cargar asignaciones cuando cambia evento activo ──
+  // ── Cargar resultados ──
   useEffect(() => {
-    if (!evActivo || tab !== 'asignar') return
-    cargarAsignaciones(evActivo.id)
-  }, [evActivo?.id, tab])
+    if (!activeEvento || activeSub !== 'res') return
+    cargarResultados(activeEvento.id)
+  }, [activeEvento?.id, activeSub])
 
-  // ── Cargar resultados cuando cambia evento res ──
+  // ── Iniciar evaluación ──
   useEffect(() => {
-    if (!evRes || tab !== 'resultados') return
-    cargarResultados(evRes.id)
-  }, [evRes?.id, tab])
+    if (!activeEvento || activeSub !== 'evaluar') return
+    setArbIdx(0)
+  }, [activeEvento?.id, activeSub])
+
+  // ── Cargar eval existente al cambiar árbitro ──
+  const arbsDelEvento = activeEvento
+    ? (bdArbitros || []).filter(a => arbsAsig.includes(a.id))
+    : []
+
+  useEffect(() => {
+    if (!activeEvento || activeSub !== 'evaluar') return
+    const arb = arbsDelEvento[arbIdx]
+    if (!arb || guardados[arb.id] !== undefined) return
+    api.get(`/evaluaciones/mia/arbitro/${arb.id}/evento/${activeEvento.id}`)
+      .then(r => {
+        if (!r.data) return
+        const s = {}
+        CRITERIOS.forEach(c => { s[c.key] = r.data[c.key] ? parseFloat(r.data[c.key]) : 0 })
+        setScores(prev => ({ ...prev, [arb.id]: s }))
+        setComentarios(prev => ({ ...prev, [arb.id]: r.data.comentario || '' }))
+        setGuardados(prev => ({ ...prev, [arb.id]: true }))
+      }).catch(() => {})
+  }, [arbIdx, activeEvento?.id, activeSub])
+
+  // ── Handlers navegación ──
+  function handleSelectSub(ev, sub) {
+    setActiveEvento(ev)
+    setActiveSub(sub)
+    setActiveGlobal(null)
+    setShowNewEvento(false)
+    setBusqArb(''); setBusqEval('')
+    if (sub === 'arb' || sub === 'eval') cargarAsignaciones(ev.id)
+    if (sub === 'res') cargarResultados(ev.id)
+    if (sub === 'evaluar') { setArbIdx(0); cargarAsignaciones(ev.id) }
+  }
+
+  function handleSelectGlobal(id) {
+    setActiveGlobal(id)
+    setActiveSub(null)
+    setActiveEvento(null)
+    setShowNewEvento(false)
+  }
+
+  function handleNewEvento() {
+    setShowNewEvento(true)
+    setActiveSub(null)
+    setActiveGlobal(null)
+  }
 
   async function cargarAsignaciones(evId) {
     setLoadingAsig(true)
@@ -92,23 +147,23 @@ export default function Admin() {
         api.get(`/evaluaciones/resumen/evento/${evId}`),
         api.get(`/evaluaciones/detalle/evento/${evId}`),
       ])
-      setResultados(rr.data)
-      setDetalle(rd.data)
+      setResultados(rr.data); setDetalle(rd.data)
     } catch { toast.error('Error al cargar resultados') }
   }
 
-  // ── Handlers: Eventos ──
+  // ── Handlers Eventos ──
   async function handleCrearEvento(e) {
     e.preventDefault()
     const fd = new FormData(e.target)
     try {
-      await api.post('/eventos', Object.fromEntries(fd))
-      e.target.reset(); await refreshEventos()
-      toast.success('✓ Evento creado correctamente')
-    } catch (err) { toast.error(err.response?.data?.error || 'Error al crear evento') }
+      const { data } = await api.post('/eventos', Object.fromEntries(fd))
+      e.target.reset(); await refreshEvs()
+      toast.success(`✓ Evento "${data.nombre}" creado`)
+      setShowNewEvento(false)
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
-  // ── Handlers: Árbitros ──
+  // ── Handlers Árbitros ──
   async function handleCrearArbitro(e) {
     e.preventDefault()
     const fd = new FormData(e.target)
@@ -128,13 +183,12 @@ export default function Admin() {
     })
     try {
       const { data } = await api.post('/arbitros/csv', { arbitros: arbs })
-      await refreshArbs()
-      toast.success(`✓ ${data.insertados} árbitros importados`)
+      await refreshArbs(); toast.success(`✓ ${data.insertados} árbitros importados`)
     } catch { toast.error('Error al importar CSV') }
     e.target.value = ''
   }
 
-  // ── Handlers: Evaluadores ──
+  // ── Handlers Evaluadores ──
   async function handleCrearUsuario(e) {
     e.preventDefault()
     const fd = new FormData(e.target)
@@ -154,58 +208,68 @@ export default function Admin() {
     })
     try {
       const { data } = await api.post('/usuarios/csv', { usuarios: usrs })
-      await refreshUsers()
-      toast.success(`✓ ${data.insertados} evaluadores importados`)
+      await refreshUsers(); toast.success(`✓ ${data.insertados} evaluadores importados`)
     } catch { toast.error('Error al importar') }
     e.target.value = ''
   }
 
-  async function handleCambiarPassword(userId) {
+  async function handleCambiarPassword(uid) {
     if (!pwNew) { setPwErr('Escribe el nuevo password'); return }
     if (pwNew.length < 4) { setPwErr('Mínimo 4 caracteres'); return }
     if (pwNew !== pwConf) { setPwErr('Las contraseñas no coinciden'); return }
     try {
-      await api.put(`/usuarios/${userId}/password`, { password: pwNew })
+      await api.put(`/usuarios/${uid}/password`, { password: pwNew })
       setPwPanel(null); setPwNew(''); setPwConf(''); setPwErr('')
       toast.success('✓ Password actualizado')
     } catch (err) { setPwErr(err.response?.data?.error || 'Error') }
   }
 
-  // ── Handlers: Asignación ──
+  // ── Handlers Asignación ──
   async function toggleArbitro(arbId) {
-    if (!evActivo) return
+    if (!activeEvento) return
     const on = arbsAsig.includes(arbId)
     try {
-      if (on) await api.delete(`/eventos/${evActivo.id}/arbitros/${arbId}`)
-      else    await api.post(`/eventos/${evActivo.id}/arbitros`, { arbitro_id: arbId })
+      if (on) await api.delete(`/eventos/${activeEvento.id}/arbitros/${arbId}`)
+      else    await api.post(`/eventos/${activeEvento.id}/arbitros`, { arbitro_id: arbId })
       setArbsAsig(prev => on ? prev.filter(id => id !== arbId) : [...prev, arbId])
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   async function toggleEvaluador(usrId) {
-    if (!evActivo) return
+    if (!activeEvento) return
     const on = evalsAsig.includes(usrId)
     try {
-      if (on) await api.delete(`/eventos/${evActivo.id}/evaluadores/${usrId}`)
-      else    await api.post(`/eventos/${evActivo.id}/evaluadores`, { usuario_id: usrId })
+      if (on) await api.delete(`/eventos/${activeEvento.id}/evaluadores/${usrId}`)
+      else    await api.post(`/eventos/${activeEvento.id}/evaluadores`, { usuario_id: usrId })
       setEvalsAsig(prev => on ? prev.filter(id => id !== usrId) : [...prev, usrId])
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
-  // ── Handlers: Config ──
-  async function handleEscudo(e) {
-    const file = e.target.files[0]; if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => { updateConfig({ escudo: ev.target.result }); toast.success('✓ Escudo actualizado') }
-    reader.readAsDataURL(file)
-    e.target.value = ''
+  // ── Handlers Evaluación ──
+  const arbActual = arbsDelEvento[arbIdx]
+  const arbScores = arbActual ? (scores[arbActual.id] || {}) : {}
+  const arbComentario = arbActual ? (comentarios[arbActual.id] || '') : ''
+  const todoCompleto = CRITERIOS.every(c => (arbScores[c.key] || 0) > 0)
+  const evaluadosCount = arbsDelEvento.filter(a => guardados[a.id]).length
+
+  function handleScore(criterio, valor) {
+    if (!arbActual) return
+    setScores(prev => ({ ...prev, [arbActual.id]: { ...(prev[arbActual.id] || {}), [criterio]: valor } }))
   }
 
-  async function handleConfig(e) {
-    e.preventDefault()
-    const fd = new FormData(e.target)
-    updateConfig({ fedNombre: fd.get('fed_nombre') || 'FEPAKA' })
-    toast.success('✓ Configuración guardada')
+  async function guardarEval() {
+    if (!todoCompleto) { toast.error('Evalúa los 5 criterios antes de guardar'); return }
+    setSaving(true)
+    try {
+      await api.post('/evaluaciones', {
+        evento_id: activeEvento.id, arbitro_id: arbActual.id,
+        ...arbScores, comentario: arbComentario || null,
+      })
+      setGuardados(prev => ({ ...prev, [arbActual.id]: true }))
+      toast.success(`✓ ${arbActual.nombre} evaluado`)
+      setTimeout(() => { if (arbIdx < arbsDelEvento.length - 1) setArbIdx(i => i + 1) }, 1200)
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+    finally { setSaving(false) }
   }
 
   // ── Filtros ──
@@ -218,27 +282,16 @@ export default function Admin() {
     u.username?.toLowerCase().includes(busqEvalD.toLowerCase())
   )
 
-  // ── Columnas de tablas ──
-  const colsEventos = [
-    { header: 'Evento', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
-    { header: 'Fecha', key: 'fecha', cell: r => r.fecha ? new Date(r.fecha).toLocaleDateString('es-ES') : '—' },
-    { header: 'Sede', key: 'sede', cell: r => r.sede || '—' },
-    { header: 'Estado', key: 'estado', cell: r => <Badge variant={r.estado === 'activo' ? 'green' : 'gold'}>{r.estado}</Badge> },
-    { header: 'Acción', key: '_', cell: r => (
-      <Button size="xs" variant="secondary" onClick={() => { setEvActivo(r); setTab('asignar') }}>Gestionar</Button>
-    )},
-  ]
-
-  const colsArbitros = [
+  // ── Columnas tablas ──
+  const colsArbs = [
     { header: 'Nombre', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
     { header: 'Provincia', key: 'provincia' },
     { header: 'Club', key: 'club' },
     { header: 'FEPAKA ID', key: 'fepaka_id', cell: r => <code>{r.fepaka_id}</code> },
     { header: 'Licencia', key: 'licencia', cell: r => <Badge variant="blue">{r.licencia}</Badge> },
   ]
-
-  const colsResultados = [
-    { header: 'Árbitro', key: 'nombre', cell: r => <><strong>{r.nombre}</strong></> },
+  const colsRes = [
+    { header: 'Árbitro', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
     { header: 'Provincia', key: 'provincia' },
     { header: 'Licencia', key: 'licencia', cell: r => <Badge variant="blue">{r.licencia}</Badge> },
     { header: 'Conform.', key: 'prom_conformidad', cell: r => r.prom_conformidad || '—' },
@@ -249,8 +302,7 @@ export default function Admin() {
     { header: 'Promedio', key: 'promedio_total', cell: r => <ScorePill value={r.promedio_total} /> },
     { header: 'Eval.', key: 'num_evaluaciones', cell: r => <span style={{ color: 'var(--gray)', fontSize: 12 }}>{r.num_evaluaciones}</span> },
   ]
-
-  const colsDetalle = [
+  const colsDet = [
     { header: 'Árbitro', key: 'arbitro_nombre', cell: r => <><strong>{r.arbitro_nombre}</strong><br/><span style={{ fontSize: 11, color: 'var(--gray2)' }}>{r.licencia}</span></> },
     { header: 'Evaluador', key: 'evaluador_nombre' },
     { header: 'Conform.', key: 'conformidad' },
@@ -260,341 +312,336 @@ export default function Admin() {
     { header: 'Presencia', key: 'presencia' },
     { header: 'Prom.', key: 'promedio_evaluador', cell: r => <ScorePill value={r.promedio_evaluador} /> },
     { header: 'Comentario', key: 'comentario', cell: r => (
-      <span style={{ fontSize: 12, color: 'var(--gray)', fontStyle: r.comentario ? 'normal' : 'italic', maxWidth: 200, display: 'block' }}>
+      <span style={{ fontSize: 12, color: 'var(--gray)', fontStyle: r.comentario ? 'normal' : 'italic', maxWidth: 180, display: 'block' }}>
         {r.comentario || 'Sin comentarios'}
       </span>
     )},
   ]
 
+  const apiBase = (import.meta.env.VITE_API_URL || '').replace('/api', '')
+
   return (
-    <AppShell
-      tabs={TABS}
-      activeTab={tab}
-      onTabChange={t => { if (t === 'evaluar') { nav('/evaluar'); return } setTab(t) }}
-    >
+    <>
       <ToastContainer toasts={toasts} />
+      <AppShell
+        eventos={eventos || []}
+        activeEvento={activeEvento}
+        activeSub={activeSub}
+        activeGlobal={activeGlobal}
+        onSelectSub={handleSelectSub}
+        onSelectGlobal={handleSelectGlobal}
+        onNewEvento={handleNewEvento}
+      >
 
-      {/* ── EVENTOS ── */}
-      {tab === 'eventos' && (
-        <div className="animate-fade">
-          <PageHeader
-            title="Eventos"
-            subtitle="Crea y gestiona los eventos de evaluación"
-            action={
-              <div style={{ display: 'flex', gap: 12 }}>
-                {eventos && (
-                  <>
-                    <StatCard label="Total eventos" value={eventos.length} icon="📅" style={{ padding: '10px 16px' }} />
-                    <StatCard label="Árbitros" value={bdArbitros?.length || 0} icon="🥋" style={{ padding: '10px 16px' }} />
-                  </>
-                )}
-              </div>
-            }
-          />
-          <Card title="CREAR NUEVO EVENTO">
-            <form onSubmit={handleCrearEvento}>
-              <div className="row2">
-                <Field label="Nombre del evento" required>
-                  <Input name="nombre" placeholder="Panamericano Panamá 2026" required />
-                </Field>
-                <Field label="Fecha">
-                  <Input name="fecha" type="date" />
-                </Field>
-              </div>
-              <div className="row2">
-                <Field label="Sede">
-                  <Input name="sede" placeholder="Ciudad, País" />
-                </Field>
-                <Field label="Núm. evaluadores">
-                  <Input name="num_evaluadores" type="number" min="1" max="20" defaultValue="4" />
-                </Field>
-              </div>
-              <Button type="submit" variant="primary">Crear evento</Button>
-            </form>
-          </Card>
-          <Card title="EVENTOS REGISTRADOS">
-            <Table
-              columns={colsEventos}
-              rows={eventos}
-              loading={loadingEventos}
-              keyExtractor={r => r.id}
-              empty={<Empty icon="📅" title="Sin eventos" description="Crea el primer evento arriba." />}
-            />
-          </Card>
-        </div>
-      )}
-
-      {/* ── BASE ÁRBITROS ── */}
-      {tab === 'bd-arb' && (
-        <div className="animate-fade">
-          <PageHeader title="Base de Árbitros" subtitle={`${bdArbitros?.length || 0} árbitros registrados en el sistema`} />
-          <Card title="IMPORTAR DESDE CSV">
-            <FileDropZone
-              accept=".csv,.txt"
-              onChange={handleCSVArbitros}
-              title="Haz clic o arrastra el archivo CSV"
-              description="Formato: nombre, apellido, provincia, club, FEPAKA ID, licencia"
-              hint="Ejemplo: Carlos,Mendoza,Panamá,Dojo Kan,FEP-0042,Nacional A"
-            />
-          </Card>
-          <Card title="AGREGAR ÁRBITRO INDIVIDUAL">
-            <form onSubmit={handleCrearArbitro}>
-              <div className="row2">
-                <Field label="Nombre" required><Input name="nombre" placeholder="Nombre" required /></Field>
-                <Field label="Apellido"><Input name="apellido" placeholder="Apellido" /></Field>
-              </div>
-              <div className="row2">
-                <Field label="Provincia"><Input name="provincia" placeholder="Provincia" /></Field>
-                <Field label="Club"><Input name="club" placeholder="Club" /></Field>
-              </div>
-              <div className="row2">
-                <Field label="FEPAKA ID"><Input name="fepaka_id" placeholder="FEP-0001" /></Field>
-                <Field label="Licencia">
-                  <Select name="licencia">{LICENCIAS.map(l => <option key={l}>{l}</option>)}</Select>
-                </Field>
-              </div>
-              <Field label="Foto (opcional)"><Input name="foto" type="file" accept="image/*" /></Field>
-              <Button type="submit" variant="primary">Agregar a base de datos</Button>
-            </form>
-          </Card>
-          <Card title={`BASE GLOBAL — ${bdArbitros?.length || 0} árbitros`}>
-            <Table columns={colsArbitros} rows={bdArbitros} loading={loadingArbs} keyExtractor={r => r.id}
-              empty={<Empty icon="🥋" title="Sin árbitros" description="Agrega árbitros arriba o importa un CSV." />}
-            />
-          </Card>
-        </div>
-      )}
-
-      {/* ── BASE EVALUADORES ── */}
-      {tab === 'bd-eval' && (
-        <div className="animate-fade">
-          <PageHeader title="Base de Evaluadores" subtitle="Gestiona los usuarios evaluadores del sistema" />
-          <Card title="IMPORTAR DESDE CSV">
-            <FileDropZone
-              accept=".csv,.txt"
-              onChange={handleCSVUsuarios}
-              title="Haz clic o arrastra el archivo CSV"
-              description="Formato: nombre, apellido, usuario, contraseña, rol"
-            />
-          </Card>
-          <Card title="AGREGAR EVALUADOR">
-            <form onSubmit={handleCrearUsuario}>
-              <div className="row2">
-                <Field label="Nombre completo" required><Input name="nombre" placeholder="Nombre completo" required /></Field>
-                <Field label="Usuario" required><Input name="username" placeholder="usuario" required /></Field>
-              </div>
-              <div className="row2">
-                <Field label="Contraseña" required><Input name="password" type="password" placeholder="Contraseña" required /></Field>
-                <Field label="Rol">
-                  <Select name="rol"><option value="evaluador">Evaluador</option><option value="admin">Administrador</option></Select>
-                </Field>
-              </div>
-              <Button type="submit" variant="primary">Agregar a base de datos</Button>
-            </form>
-          </Card>
-          <Card title="BASE GLOBAL DE EVALUADORES">
-            {loadingUsers
-              ? <Table columns={[{header:'Nombre'},{header:'Usuario'},{header:'Rol'},{header:'Password'}]} rows={[]} loading={true} keyExtractor={(_,i)=>i} />
-              : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    {['Nombre','Usuario','Rol','Estado','Password'].map(h => (
-                      <th key={h} style={{ background:'var(--dark)',color:'rgba(255,255,255,.6)',padding:'9px 14px',textAlign:'left',fontSize:10,letterSpacing:'1px',textTransform:'uppercase',fontWeight:500 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(bdUsuarios || []).map(u => (
-                    <tr key={u.id}>
-                      <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><strong>{u.nombre}</strong></td>
-                      <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><code>{u.username}</code></td>
-                      <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><Badge variant={u.rol==='admin'?'red':'blue'}>{u.rol}</Badge></td>
-                      <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><Badge variant={u.activo?'green':'gold'}>{u.activo?'Activo':'Inactivo'}</Badge></td>
-                      <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}>
-                        {pwPanel === u.id ? (
-                          <div style={{ background:'var(--light)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 12px',minWidth:260 }}>
-                            <Field label="Nuevo password" error={pwErr}>
-                              <Input type="password" value={pwNew} onChange={e=>{setPwNew(e.target.value);setPwErr('')}} placeholder="Nuevo password" />
-                            </Field>
-                            <Field label="Confirmar">
-                              <Input type="password" value={pwConf} onChange={e=>{setPwConf(e.target.value);setPwErr('')}} placeholder="Repetir password" />
-                            </Field>
-                            {pwErr && <div style={{fontSize:11,color:'var(--red)',marginBottom:8}}>{pwErr}</div>}
-                            <div style={{ display:'flex',gap:6 }}>
-                              <Button size="sm" variant="success" onClick={() => handleCambiarPassword(u.id)}>✓ Guardar</Button>
-                              <Button size="sm" variant="secondary" onClick={()=>{setPwPanel(null);setPwNew('');setPwConf('');setPwErr('')}}>Cancelar</Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <Button size="xs" variant="secondary" onClick={()=>{setPwPanel(u.id);setPwNew('');setPwConf('');setPwErr('')}}>🔑 Cambiar password</Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Card>
-        </div>
-      )}
-
-      {/* ── ASIGNAR A EVENTO ── */}
-      {tab === 'asignar' && (
-        <div className="animate-fade">
-          <PageHeader title="Asignar a Evento" subtitle="Selecciona árbitros y evaluadores para cada evento" />
-          <Card padding="12px 18px">
-            <div style={{ display:'flex',alignItems:'center',gap:12,flexWrap:'wrap' }}>
-              <span style={{ fontSize:12,color:'var(--gray)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.8px' }}>Evento activo:</span>
-              <Select value={evActivo?.id||''} onChange={e => {
-                const ev = eventos?.find(x => x.id === parseInt(e.target.value))
-                setEvActivo(ev)
-              }} style={{ maxWidth: 320 }}>
-                {(eventos || []).map(ev => <option key={ev.id} value={ev.id}>{ev.nombre}</option>)}
-              </Select>
-              {evActivo && (
-                <div style={{ display:'flex',gap:8,marginLeft:'auto' }}>
-                  <Badge variant="blue">{arbsAsig.length} árbitros</Badge>
-                  <Badge variant="green">{evalsAsig.length} evaluadores</Badge>
-                </div>
-              )}
+        {/* ── BIENVENIDA ── */}
+        {!activeSub && !activeGlobal && !showNewEvento && (
+          <div>
+            <PageHeader title="BIENVENIDO" subtitle="Selecciona un evento del panel izquierdo para comenzar" />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
+              <StatCard label="Eventos" value={eventos?.length || 0} icon="📅" />
+              <StatCard label="Árbitros" value={bdArbitros?.length || 0} icon="🥋" />
+              <StatCard label="Evaluadores" value={bdUsuarios?.length || 0} icon="👤" />
             </div>
-          </Card>
+            <Card title="EVENTOS REGISTRADOS">
+              <Table
+                columns={[
+                  { header: 'Evento', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
+                  { header: 'Fecha', key: 'fecha', cell: r => r.fecha ? new Date(r.fecha).toLocaleDateString('es-ES') : '—' },
+                  { header: 'Sede', key: 'sede', cell: r => r.sede || '—' },
+                  { header: 'Estado', key: 'estado', cell: r => <Badge variant={r.estado === 'activo' ? 'green' : 'gold'}>{r.estado}</Badge> },
+                  { header: 'Acción', key: '_', cell: r => <Button size="xs" variant="secondary" onClick={() => handleSelectSub(r, 'arb')}>Gestionar</Button> },
+                ]}
+                rows={eventos} loading={loadEvs} keyExtractor={r => r.id}
+                empty={<Empty icon="📅" title="Sin eventos" description="Crea el primer evento." />}
+              />
+            </Card>
+          </div>
+        )}
 
-          {loadingAsig ? (
-            <div style={{ display:'flex',justifyContent:'center',padding:40 }}><Spinner size={28} /></div>
-          ) : (
-            <div className="row2">
-              {/* Árbitros */}
-              <Card title="ÁRBITROS">
-                <Input value={busqArb} onChange={e => setBusqArb(e.target.value)} placeholder="Buscar árbitro..." icon="🔍"
-                  style={{ marginBottom: 8 }} />
-                <div className="select-list">
-                  {arbsFilt.length === 0
-                    ? <Empty icon="🔍" title="Sin resultados" description="Prueba con otro término." />
+        {/* ── NUEVO EVENTO ── */}
+        {showNewEvento && (
+          <div>
+            <PageHeader title="CREAR NUEVO EVENTO" subtitle="Los árbitros y evaluadores se asignan después" />
+            <Card>
+              <form onSubmit={handleCrearEvento}>
+                <div className="row2">
+                  <Field label="Nombre del evento" required><Input name="nombre" placeholder="Panamericano Panamá 2026" required /></Field>
+                  <Field label="Fecha"><Input name="fecha" type="date" /></Field>
+                </div>
+                <div className="row2">
+                  <Field label="Sede"><Input name="sede" placeholder="Ciudad, País" /></Field>
+                  <Field label="Núm. evaluadores"><Input name="num_evaluadores" type="number" min="1" max="20" defaultValue="4" /></Field>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button type="submit" variant="primary">Crear evento</Button>
+                  <Button type="button" variant="secondary" onClick={() => setShowNewEvento(false)}>Cancelar</Button>
+                </div>
+              </form>
+            </Card>
+          </div>
+        )}
+
+        {/* ── ÁRBITROS DEL EVENTO ── */}
+        {activeSub === 'arb' && activeEvento && (
+          <div>
+            <EventoBanner evento={activeEvento} />
+            <PageHeader title="ÁRBITROS DEL EVENTO" subtitle="Selecciona los árbitros que participan en este evento" />
+            <Card>
+              <Input value={busqArb} onChange={e => setBusqArb(e.target.value)} placeholder="Buscar árbitro..." icon="🔍" style={{ marginBottom: 8 }} />
+              <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+                {loadingAsig
+                  ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--gray)' }}>Cargando...</div>
+                  : arbsFilt.length === 0
+                    ? <Empty icon="🔍" title="Sin resultados" />
                     : arbsFilt.map(a => (
-                      <AssignItem
-                        key={a.id}
-                        name={a.nombre}
+                      <AssignItem key={a.id} name={a.nombre}
                         sub={`${a.provincia} · ${a.licencia} · ${a.fepaka_id}`}
                         assigned={arbsAsig.includes(a.id)}
                         onToggle={() => toggleArbitro(a.id)}
                       />
                     ))
-                  }
-                </div>
-                <div style={{ marginTop:8,fontSize:12,color:'var(--gray)' }}>Asignados: <strong>{arbsAsig.length}</strong></div>
-              </Card>
+                }
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--gray)' }}>Asignados: <strong>{arbsAsig.length}</strong></div>
+            </Card>
+          </div>
+        )}
 
-              {/* Evaluadores */}
-              <Card title="EVALUADORES">
-                <Input value={busqEval} onChange={e => setBusqEval(e.target.value)} placeholder="Buscar evaluador..." icon="🔍"
-                  style={{ marginBottom: 8 }} />
-                <div className="select-list">
-                  {evalsFilt.length === 0
-                    ? <Empty icon="🔍" title="Sin resultados" description="Prueba con otro término." />
+        {/* ── EVALUADORES DEL EVENTO ── */}
+        {activeSub === 'eval' && activeEvento && (
+          <div>
+            <EventoBanner evento={activeEvento} />
+            <PageHeader title="EVALUADORES DEL EVENTO" subtitle="Selecciona los evaluadores que calificarán en este evento" />
+            <Card>
+              <Input value={busqEval} onChange={e => setBusqEval(e.target.value)} placeholder="Buscar evaluador..." icon="🔍" style={{ marginBottom: 8 }} />
+              <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+                {loadingAsig
+                  ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--gray)' }}>Cargando...</div>
+                  : evalsFilt.length === 0
+                    ? <Empty icon="🔍" title="Sin resultados" />
                     : evalsFilt.map(u => (
-                      <AssignItem
-                        key={u.id}
-                        name={u.nombre}
+                      <AssignItem key={u.id} name={u.nombre}
                         sub={`${u.username} · ${u.rol}`}
                         assigned={evalsAsig.includes(u.id)}
                         onToggle={() => toggleEvaluador(u.id)}
                       />
                     ))
-                  }
-                </div>
-                <div style={{ marginTop:8,fontSize:12,color:'var(--gray)' }}>Asignados: <strong>{evalsAsig.length}</strong></div>
-              </Card>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── CONFIGURACIÓN ── */}
-      {tab === 'config' && (
-        <div className="animate-fade">
-          <PageHeader title="Configuración" subtitle="Personaliza la apariencia del sistema" />
-          <Card title="ESCUDO DE LA FEDERACIÓN"
-            subtitle="El escudo aparece en el login y en todas las páginas">
-            {config.escudo && (
-              <div style={{ display:'flex',alignItems:'center',gap:16,marginBottom:16 }}>
-                <img src={config.escudo} alt="Escudo actual"
-                  style={{ width:72,height:72,borderRadius:12,objectFit:'contain',border:'1px solid var(--border)' }} />
-                <div>
-                  <div style={{ fontSize:13,fontWeight:500,marginBottom:6 }}>Escudo actual</div>
-                  <Button size="sm" variant="ghost" onClick={() => { updateConfig({ escudo: null }); toast.success('Escudo eliminado') }}>
-                    Quitar escudo
-                  </Button>
-                </div>
+                }
               </div>
-            )}
-            <FileDropZone
-              accept="image/*"
-              onChange={handleEscudo}
-              title="Seleccionar imagen del escudo"
-              description="PNG, JPG o SVG recomendado. Tamaño máximo: 2 MB"
-            />
-          </Card>
-          <Card title="NOMBRE DE LA FEDERACIÓN">
-            <form onSubmit={handleConfig}>
-              <Field label="Nombre que aparece en el encabezado">
-                <Input name="fed_nombre" defaultValue={config.fedNombre} style={{ fontSize:15,fontWeight:500 }} />
-              </Field>
-              <Button type="submit" variant="primary">Guardar configuración</Button>
-            </form>
-          </Card>
-        </div>
-      )}
-
-      {/* ── RESULTADOS ── */}
-      {tab === 'resultados' && (
-        <div className="animate-fade">
-          <PageHeader title="Resultados" subtitle="Promedios y evaluaciones individuales por evento" />
-          <Card padding="12px 18px">
-            <div style={{ display:'flex',alignItems:'center',gap:12,flexWrap:'wrap' }}>
-              <span style={{ fontSize:12,color:'var(--gray)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.8px' }}>Evento:</span>
-              <Select value={evRes?.id||''} onChange={e => {
-                const ev = eventos?.find(x => x.id === parseInt(e.target.value))
-                setEvRes(ev)
-              }} style={{ maxWidth: 320 }}>
-                {(eventos || []).map(ev => <option key={ev.id} value={ev.id}>{ev.nombre}</option>)}
-              </Select>
-            </div>
-          </Card>
-
-          <div style={{ display:'flex',gap:8,marginBottom:14 }}>
-            <Button variant={vistaRes==='resumen'?'primary':'secondary'} onClick={()=>setVistaRes('resumen')}>
-              📊 Promedios generales
-            </Button>
-            <Button variant={vistaRes==='detalle'?'primary':'secondary'} onClick={()=>setVistaRes('detalle')}>
-              👤 Por evaluador
-            </Button>
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--gray)' }}>Asignados: <strong>{evalsAsig.length}</strong></div>
+            </Card>
           </div>
+        )}
 
-          {vistaRes === 'resumen' && (
-            <Card title={`PROMEDIOS GENERALES — ${evRes?.nombre || ''}`}>
-              <Table
-                columns={colsResultados}
-                rows={resultados}
-                keyExtractor={r => r.id}
-                empty={<Empty icon="📊" title="Sin evaluaciones" description="No hay evaluaciones guardadas para este evento." />}
+        {/* ── EVALUAR (modo admin) ── */}
+        {activeSub === 'evaluar' && activeEvento && (
+          <div>
+            <EventoBanner evento={activeEvento} />
+            {arbsDelEvento.length === 0
+              ? <Empty icon="🥋" title="Sin árbitros asignados" description="Asigna árbitros al evento primero." />
+              : <>
+                <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+                  <ProgressBar value={evaluadosCount} max={arbsDelEvento.length || 1}
+                    label="Progreso" sublabel={`${evaluadosCount} / ${arbsDelEvento.length} evaluados`} />
+                </div>
+                {arbActual && (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 16px', marginBottom: 14 }}>
+                      <button onClick={() => setArbIdx(i => Math.max(0, i - 1))} disabled={arbIdx === 0}
+                        style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'white', cursor: arbIdx === 0 ? 'not-allowed' : 'pointer', opacity: arbIdx === 0 ? 0.3 : 1, fontSize: 16 }}>←</button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <div style={{ width: 52, height: 52, borderRadius: 10, background: 'var(--light)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--gray2)', overflow: 'hidden' }}>
+                          {arbActual.foto_url
+                            ? <img src={`${apiBase}${arbActual.foto_url}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : arbActual.nombre.split(' ').map(x => x[0]).join('').substring(0, 2).toUpperCase()
+                          }
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 600 }}>{arbActual.nombre}</div>
+                          <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 2 }}>{arbActual.provincia} · {arbActual.licencia}</div>
+                          <div style={{ fontSize: 11, color: 'var(--gray2)', marginTop: 1 }}>{arbActual.club} · {arbActual.fepaka_id}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 12, color: 'var(--gray)' }}>{arbIdx + 1} / {arbsDelEvento.length}</div>
+                        <div style={{ fontSize: 11, marginTop: 3, color: guardados[arbActual.id] ? 'var(--green)' : 'var(--gray2)' }}>
+                          {guardados[arbActual.id] ? '✓ Evaluado' : 'Sin evaluar'}
+                        </div>
+                      </div>
+                      <button onClick={() => setArbIdx(i => Math.min(arbsDelEvento.length - 1, i + 1))} disabled={arbIdx === arbsDelEvento.length - 1}
+                        style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'white', cursor: arbIdx === arbsDelEvento.length - 1 ? 'not-allowed' : 'pointer', opacity: arbIdx === arbsDelEvento.length - 1 ? 0.3 : 1, fontSize: 16 }}>→</button>
+                    </div>
+                    <ScorePanel scores={arbScores} criterios={CRITERIOS} />
+                    {CRITERIOS.map(c => (
+                      <CriteriaCard key={c.key} label={c.label}
+                        value={arbScores[c.key] || 0} onChange={val => handleScore(c.key, val)} disabled={saving} />
+                    ))}
+                    <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px', marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--gray)', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 8 }}>
+                        Comentarios <span style={{ fontWeight: 400, color: 'var(--gray2)' }}>(opcional)</span>
+                      </div>
+                      <textarea value={arbComentario} onChange={e => setComentarios(prev => ({ ...prev, [arbActual.id]: e.target.value }))}
+                        placeholder="Observaciones adicionales..." rows={3} disabled={saving}
+                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontFamily: 'var(--font)', outline: 'none', resize: 'vertical', lineHeight: 1.5, transition: 'border .2s' }}
+                        onFocus={e => e.target.style.borderColor = 'var(--red)'}
+                        onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+                    </div>
+                    <Button variant={todoCompleto ? 'success' : 'secondary'} fullWidth size="lg"
+                      onClick={guardarEval} loading={saving} disabled={!todoCompleto}>
+                      {todoCompleto ? 'Guardar y continuar →' : 'Completa los 5 criterios para guardar'}
+                    </Button>
+                  </>
+                )}
+              </>
+            }
+          </div>
+        )}
+
+        {/* ── RESULTADOS ── */}
+        {activeSub === 'res' && activeEvento && (
+          <div>
+            <EventoBanner evento={activeEvento} />
+            <PageHeader title="RESULTADOS" />
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <Button variant={vistaRes === 'resumen' ? 'primary' : 'secondary'} onClick={() => setVistaRes('resumen')}>📊 Promedios generales</Button>
+              <Button variant={vistaRes === 'detalle' ? 'primary' : 'secondary'} onClick={() => setVistaRes('detalle')}>👤 Por evaluador</Button>
+            </div>
+            {vistaRes === 'resumen' && (
+              <Card title="PROMEDIOS GENERALES">
+                <Table columns={colsRes} rows={resultados} keyExtractor={r => r.id}
+                  empty={<Empty icon="📊" title="Sin evaluaciones" description="No hay evaluaciones guardadas aún." />} />
+              </Card>
+            )}
+            {vistaRes === 'detalle' && (
+              <Card title="POR EVALUADOR">
+                <Table columns={colsDet} rows={detalle} keyExtractor={r => r.id}
+                  empty={<Empty icon="👤" title="Sin evaluaciones individuales" />} />
+              </Card>
+            )}
+          </div>
+        )}
+
+        {/* ── BASE ÁRBITROS ── */}
+        {activeGlobal === 'bd-arb' && (
+          <div>
+            <PageHeader title="BASE DE ÁRBITROS" subtitle={`${bdArbitros?.length || 0} árbitros registrados`} />
+            <Card title="IMPORTAR DESDE CSV">
+              <CsvDropZone accept=".csv,.txt" onChange={handleCSVArbitros}
+                description="Formato: nombre, apellido, provincia, club, FEPAKA ID, licencia"
+                hint="Ejemplo: Carlos,Mendoza,Panamá,Dojo Kan,FEP-0042,Nacional A" />
+            </Card>
+            <Card title="AGREGAR ÁRBITRO INDIVIDUAL">
+              <form onSubmit={handleCrearArbitro}>
+                <div className="row2">
+                  <Field label="Nombre" required><Input name="nombre" placeholder="Nombre" required /></Field>
+                  <Field label="Apellido"><Input name="apellido" placeholder="Apellido" /></Field>
+                </div>
+                <div className="row2">
+                  <Field label="Provincia"><Input name="provincia" placeholder="Provincia" /></Field>
+                  <Field label="Club"><Input name="club" placeholder="Club" /></Field>
+                </div>
+                <div className="row2">
+                  <Field label="FEPAKA ID"><Input name="fepaka_id" placeholder="FEP-0001" /></Field>
+                  <Field label="Licencia"><Select name="licencia">{LICENCIAS.map(l => <option key={l}>{l}</option>)}</Select></Field>
+                </div>
+                <Field label="Foto (opcional)"><Input name="foto" type="file" accept="image/*" /></Field>
+                <Button type="submit" variant="primary">Agregar a base de datos</Button>
+              </form>
+            </Card>
+            <Card title={`BASE GLOBAL — ${bdArbitros?.length || 0} árbitros`}>
+              <Table columns={colsArbs} rows={bdArbitros} loading={loadArbs} keyExtractor={r => r.id}
+                empty={<Empty icon="🥋" title="Sin árbitros" description="Agrega árbitros arriba o importa un CSV." />} />
+            </Card>
+          </div>
+        )}
+
+        {/* ── BASE EVALUADORES ── */}
+        {activeGlobal === 'bd-eval' && (
+          <div>
+            <PageHeader title="BASE DE EVALUADORES" subtitle="Registro global de evaluadores del sistema" />
+            <Card title="IMPORTAR DESDE CSV">
+              <CsvDropZone accept=".csv,.txt" onChange={handleCSVUsuarios}
+                description="Formato: nombre, apellido, usuario, contraseña, rol" />
+            </Card>
+            <Card title="AGREGAR EVALUADOR">
+              <form onSubmit={handleCrearUsuario}>
+                <div className="row2">
+                  <Field label="Nombre completo" required><Input name="nombre" placeholder="Nombre completo" required /></Field>
+                  <Field label="Usuario" required><Input name="username" placeholder="usuario" required /></Field>
+                </div>
+                <div className="row2">
+                  <Field label="Contraseña" required><Input name="password" type="password" placeholder="Contraseña" required /></Field>
+                  <Field label="Rol"><Select name="rol"><option value="evaluador">Evaluador</option><option value="admin">Administrador</option></Select></Field>
+                </div>
+                <Button type="submit" variant="primary">Agregar a base de datos</Button>
+              </form>
+            </Card>
+            <Card title="EVALUADORES REGISTRADOS">
+              {loadUsers
+                ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--gray)' }}>Cargando...</div>
+                : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead><tr>{['Nombre','Usuario','Rol','Estado','Password'].map(h => (
+                    <th key={h} style={{ background:'var(--dark)',color:'rgba(255,255,255,.6)',padding:'9px 14px',textAlign:'left',fontSize:10,letterSpacing:'1px',textTransform:'uppercase',fontWeight:500 }}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {(bdUsuarios || []).map(u => (
+                      <tr key={u.id}>
+                        <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><strong>{u.nombre}</strong></td>
+                        <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><code style={{fontSize:11,background:'var(--light)',padding:'2px 6px',borderRadius:4}}>{u.username}</code></td>
+                        <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><Badge variant={u.rol==='admin'?'red':'blue'}>{u.rol}</Badge></td>
+                        <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><Badge variant={u.activo?'green':'gold'}>{u.activo?'Activo':'Inactivo'}</Badge></td>
+                        <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}>
+                          {pwPanel === u.id ? (
+                            <div style={{ background:'var(--light)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 12px',minWidth:240 }}>
+                              <Field label="Nuevo password" error={pwErr}>
+                                <Input type="password" value={pwNew} onChange={e=>{setPwNew(e.target.value);setPwErr('')}} placeholder="Nuevo password" />
+                              </Field>
+                              <Field label="Confirmar">
+                                <Input type="password" value={pwConf} onChange={e=>{setPwConf(e.target.value);setPwErr('')}} placeholder="Repetir password" />
+                              </Field>
+                              {pwErr && <div style={{fontSize:11,color:'var(--red)',marginBottom:8}}>{pwErr}</div>}
+                              <div style={{display:'flex',gap:6}}>
+                                <Button size="sm" variant="success" onClick={()=>handleCambiarPassword(u.id)}>✓ Guardar</Button>
+                                <Button size="sm" variant="secondary" onClick={()=>{setPwPanel(null);setPwNew('');setPwConf('');setPwErr('')}}>Cancelar</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button size="xs" variant="secondary" onClick={()=>{setPwPanel(u.id);setPwNew('');setPwConf('');setPwErr('')}}>🔑 Cambiar password</Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </Card>
+          </div>
+        )}
+
+        {/* ── CONFIGURACIÓN ── */}
+        {activeGlobal === 'config' && (
+          <div>
+            <PageHeader title="CONFIGURACIÓN" subtitle="Personaliza la apariencia del sistema" />
+            <Card title="ESCUDO DE LA FEDERACIÓN" subtitle="El escudo aparece en el login y en el encabezado de todas las páginas">
+              <EscudoUpload
+                escudo={config.escudo}
+                onChange={data => { updateConfig({ escudo: data }); toast.success('✓ Escudo actualizado') }}
+                onRemove={() => { updateConfig({ escudo: null }); toast.success('Escudo eliminado') }}
               />
             </Card>
-          )}
-
-          {vistaRes === 'detalle' && (
-            <Card title={`EVALUACIONES INDIVIDUALES — ${evRes?.nombre || ''}`}>
-              <Table
-                columns={colsDetalle}
-                rows={detalle}
-                keyExtractor={r => r.id}
-                empty={<Empty icon="👤" title="Sin evaluaciones individuales" description="Los evaluadores aún no han guardado evaluaciones en este evento." />}
-              />
+            <Card title="NOMBRE DE LA FEDERACIÓN">
+              <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ fedNombre: fd.get('fed_nombre') || 'FEPAKA' }); toast.success('✓ Configuración guardada') }}>
+                <Field label="Nombre en el encabezado">
+                  <Input name="fed_nombre" defaultValue={config.fedNombre} style={{ fontSize: 15, fontWeight: 500 }} />
+                </Field>
+                <Button type="submit" variant="primary">Guardar configuración</Button>
+              </form>
             </Card>
-          )}
-        </div>
-      )}
-    </AppShell>
+          </div>
+        )}
+
+      </AppShell>
+    </>
   )
 }
