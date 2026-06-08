@@ -21,25 +21,33 @@ router.get('/arbitro/:arbitroId/evento/:eventoId', authMiddleware, async (req, r
 });
 
 // GET resumen de promedios por árbitro en un evento
-// FIX: usa evento_arbitros en lugar de a.evento_id
+// Funciona con ambas arquitecturas: evento_arbitros Y a.evento_id legacy
 router.get('/resumen/evento/:eventoId', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT
-         a.id, a.nombre, a.provincia, a.licencia, a.club, a.fepaka_id, a.foto_url,
+         a.id,
+         a.nombre,
+         COALESCE(a.apellido, '') as apellido,
+         CASE WHEN a.apellido IS NOT NULL AND a.apellido != ''
+              THEN a.nombre || ' ' || a.apellido
+              ELSE a.nombre END as nombre_completo,
+         a.provincia, a.licencia, a.club, a.fepaka_id, a.foto_url,
          COUNT(e.id) as num_evaluaciones,
-         ROUND(AVG(e.conformidad)::numeric, 1)            as prom_conformidad,
-         ROUND(AVG(e.manejo_tatami)::numeric, 1)          as prom_tatami,
-         ROUND(AVG(e.instrucciones)::numeric, 1)          as prom_instrucciones,
-         ROUND(AVG(e.aplicacion_reglamento)::numeric, 1)  as prom_reglamento,
-         ROUND(AVG(e.presencia)::numeric, 1)              as prom_presencia,
+         ROUND(AVG(e.conformidad)::numeric, 1)           as prom_conformidad,
+         ROUND(AVG(e.manejo_tatami)::numeric, 1)         as prom_tatami,
+         ROUND(AVG(e.instrucciones)::numeric, 1)         as prom_instrucciones,
+         ROUND(AVG(e.aplicacion_reglamento)::numeric, 1) as prom_reglamento,
+         ROUND(AVG(e.presencia)::numeric, 1)             as prom_presencia,
          ROUND(
            ((AVG(e.conformidad)+AVG(e.manejo_tatami)+AVG(e.instrucciones)
              +AVG(e.aplicacion_reglamento)+AVG(e.presencia))/5)::numeric, 2
          ) as promedio_total
        FROM arbitros a
-       JOIN evento_arbitros ea ON ea.arbitro_id = a.id AND ea.evento_id = $1
        LEFT JOIN evaluaciones e ON e.arbitro_id = a.id AND e.evento_id = $1
+       WHERE
+         a.id IN (SELECT arbitro_id FROM evento_arbitros WHERE evento_id = $1)
+         OR a.evento_id = $1
        GROUP BY a.id
        ORDER BY promedio_total DESC NULLS LAST`,
       [req.params.eventoId]
@@ -49,15 +57,16 @@ router.get('/resumen/evento/:eventoId', authMiddleware, async (req, res) => {
 });
 
 // GET evaluaciones individuales por evaluador (vista detalle admin)
-// FIX: usa evento_arbitros en lugar de a.evento_id
 router.get('/detalle/evento/:eventoId', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT
          e.*,
-         a.nombre  as arbitro_nombre,
+         CASE WHEN a.apellido IS NOT NULL AND a.apellido != ''
+              THEN a.nombre || ' ' || a.apellido
+              ELSE a.nombre END as arbitro_nombre,
          a.provincia, a.licencia, a.fepaka_id,
-         u.nombre  as evaluador_nombre,
+         u.nombre as evaluador_nombre,
          ROUND(
            ((e.conformidad+e.manejo_tatami+e.instrucciones
              +e.aplicacion_reglamento+e.presencia)/5)::numeric, 2
@@ -65,7 +74,6 @@ router.get('/detalle/evento/:eventoId', authMiddleware, async (req, res) => {
        FROM evaluaciones e
        JOIN arbitros  a ON a.id = e.arbitro_id
        JOIN usuarios  u ON u.id = e.usuario_id
-       JOIN evento_arbitros ea ON ea.arbitro_id = a.id AND ea.evento_id = $1
        WHERE e.evento_id = $1
        ORDER BY a.nombre, u.nombre`,
       [req.params.eventoId]
