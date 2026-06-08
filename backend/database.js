@@ -82,3 +82,37 @@ async function initDB() {
 
 initDB().catch(console.error);
 module.exports = pool;
+
+// Migración: hacer fepaka_id nullable para árbitros sin ID
+// y asegurar que árbitros con evento_id legacy sigan visibles
+async function runMigrations() {
+  try {
+    // Permitir fepaka_id NULL (por si acaso)
+    await pool.query(`ALTER TABLE arbitros ALTER COLUMN fepaka_id DROP NOT NULL`).catch(() => {});
+    // Crear tablas de relación si no existen aún
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS evento_arbitros (
+        evento_id INT REFERENCES eventos(id) ON DELETE CASCADE,
+        arbitro_id INT REFERENCES arbitros(id) ON DELETE CASCADE,
+        PRIMARY KEY (evento_id, arbitro_id)
+      );
+      CREATE TABLE IF NOT EXISTS evento_evaluadores (
+        evento_id INT REFERENCES eventos(id) ON DELETE CASCADE,
+        usuario_id INT REFERENCES usuarios(id) ON DELETE CASCADE,
+        PRIMARY KEY (evento_id, usuario_id)
+      );
+    `);
+    // Migrar árbitros legacy (que tienen evento_id) a la tabla evento_arbitros
+    await pool.query(`
+      INSERT INTO evento_arbitros (evento_id, arbitro_id)
+      SELECT evento_id, id FROM arbitros
+      WHERE evento_id IS NOT NULL
+      ON CONFLICT DO NOTHING
+    `);
+    console.log('Migraciones ejecutadas ✓');
+  } catch (err) {
+    console.error('Error en migración:', err.message);
+  }
+}
+
+runMigrations();

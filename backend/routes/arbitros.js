@@ -14,10 +14,15 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
-// GET todos los árbitros (base global)
+// GET todos los árbitros de la base global
+// FIX: incluye tanto los que tienen evento_id NULL como los migrados
 router.get('/todos', authMiddleware, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM arbitros WHERE evento_id IS NULL ORDER BY nombre');
+    const result = await pool.query(
+      `SELECT DISTINCT a.*
+       FROM arbitros a
+       ORDER BY a.nombre`
+    );
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -35,35 +40,66 @@ router.get('/evento/:eventoId', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST agregar árbitro a la base global (sin evento_id)
+// POST agregar árbitro a la base global
 router.post('/', authMiddleware, adminOnly, upload.single('foto'), async (req, res) => {
   try {
     const { nombre, apellido, provincia, club, fepaka_id, licencia } = req.body;
-    const nombreCompleto = apellido ? `${nombre} ${apellido}` : nombre;
+    const nombreCompleto = apellido ? `${nombre} ${apellido}`.trim() : nombre;
     const foto_url = req.file ? `/uploads/${req.file.filename}` : null;
+
+    // Verificar si el FEPAKA ID ya existe antes de insertar
+    if (fepaka_id) {
+      const exists = await pool.query(
+        'SELECT id, nombre FROM arbitros WHERE fepaka_id = $1', [fepaka_id]
+      );
+      if (exists.rows.length > 0) {
+        return res.status(400).json({
+          error: `El FEPAKA ID "${fepaka_id}" ya está registrado para "${exists.rows[0].nombre}"`
+        });
+      }
+    }
+
     const result = await pool.query(
-      'INSERT INTO arbitros (nombre, provincia, club, fepaka_id, licencia, foto_url) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [nombreCompleto, provincia, club, fepaka_id, licencia, foto_url]
+      `INSERT INTO arbitros (nombre, provincia, club, fepaka_id, licencia, foto_url)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [nombreCompleto, provincia, club, fepaka_id || null, licencia, foto_url]
     );
     res.status(201).json(result.rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(400).json({ error: `El FEPAKA ID ya está registrado en el sistema` });
+    }
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// POST importar CSV masivo a base global
+// POST importar CSV masivo
 router.post('/csv', authMiddleware, adminOnly, async (req, res) => {
   try {
     const { arbitros } = req.body;
     const inserted = [];
+    const omitidos = [];
     for (const a of arbitros) {
       try {
         const r = await pool.query(
-          'INSERT INTO arbitros (nombre, provincia, club, fepaka_id, licencia) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (fepaka_id) DO NOTHING RETURNING *',
-          [a.nombre, a.provincia, a.club, a.fepaka_id, a.licencia]
+          `INSERT INTO arbitros (nombre, provincia, club, fepaka_id, licencia)
+           VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (fepaka_id) DO NOTHING RETURNING *`,
+          [a.nombre, a.provincia, a.club, a.fepaka_id || null, a.licencia]
         );
         if (r.rows.length) inserted.push(r.rows[0]);
-      } catch { /* omitir duplicados */ }
+        else omitidos.push(a.nombre);
+      } catch { omitidos.push(a.nombre) }
     }
-    res.json({ insertados: inserted.length, arbitros: inserted });
+    res.json({ insertados: inserted.length, omitidos: omitidos.length, arbitros: inserted });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE árbitro
+router.delete('/:id', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM arbitros WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
