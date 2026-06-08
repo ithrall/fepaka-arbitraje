@@ -15,6 +15,12 @@ const CRITERIOS = [
   { key: 'presencia',             label: 'Presencia',                 short: 'Presencia'},
 ]
 
+
+function nombreCompleto(arb) {
+  if (!arb) return ''
+  return arb.nombre_completo || (arb.apellido ? `${nombreCompleto(arb)} ${arb.apellido}` : arb.nombre)
+}
+
 export default function Evaluar() {
   const { user, isAdmin } = useApp()
   const { toasts, toast } = useToast()
@@ -102,7 +108,7 @@ export default function Evaluar() {
         comentario: arbComentario || null,
       })
       setGuardados(prev => ({ ...prev, [arb.id]: true }))
-      toast.success(`✓ Evaluación de ${arb.nombre} guardada`)
+      toast.success(`✓ Evaluación de ${nombreCompleto(arb)} guardada`)
       setTimeout(() => {
         if (arbIdx < arbitros.length - 1) setArbIdx(i => i + 1)
       }, 1200)
@@ -204,14 +210,14 @@ export default function Evaluar() {
                 overflow: 'hidden',
               }}>
                 {arb.foto_url
-                  ? <img src={`${apiBase}${arb.foto_url}`} alt={arb.nombre}
+                  ? <img src={`${apiBase}${arb.foto_url}`} alt={nombreCompleto(arb)}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   : <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--gray2)' }}>{initials}</span>
                 }
               </div>
 
               <div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--dark)' }}>{arb.nombre}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--dark)' }}>{nombreCompleto(arb)}</div>
                 <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 2 }}>{arb.provincia} · {arb.licencia}</div>
                 <div style={{ fontSize: 11, color: 'var(--gray2)', marginTop: 1 }}>{arb.club} · {arb.fepaka_id}</div>
               </div>

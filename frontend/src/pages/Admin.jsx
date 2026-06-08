@@ -17,6 +17,13 @@ const CRITERIOS = [
   { key: 'presencia',             label: 'Presencia',                 short: 'Presencia'},
 ]
 
+
+// Helper: nombre completo del árbitro
+function nombreCompleto(arb) {
+  if (!arb) return ''
+  return arb.nombre_completo || (arb.apellido ? `${arb.nombre} ${arb.apellido}` : arb.nombre)
+}
+
 export default function Admin() {
   const { config, updateConfig } = useApp()
   const { toasts, toast } = useToast()
@@ -273,10 +280,13 @@ export default function Admin() {
   }
 
   // ── Filtros ──
-  const arbsFilt = (bdArbitros || []).filter(a =>
-    !busqArbD || a.nombre.toLowerCase().includes(busqArbD.toLowerCase()) ||
-    a.fepaka_id?.toLowerCase().includes(busqArbD.toLowerCase())
-  )
+  const arbsFilt = (bdArbitros || []).filter(a => {
+    if (!busqArbD) return true
+    const q = busqArbD.toLowerCase()
+    return nombreCompleto(a).toLowerCase().includes(q) ||
+           a.fepaka_id?.toLowerCase().includes(q) ||
+           a.provincia?.toLowerCase().includes(q)
+  })
   const evalsFilt = (bdUsuarios || []).filter(u =>
     !busqEvalD || u.nombre.toLowerCase().includes(busqEvalD.toLowerCase()) ||
     u.username?.toLowerCase().includes(busqEvalD.toLowerCase())
@@ -284,7 +294,7 @@ export default function Admin() {
 
   // ── Columnas tablas ──
   const colsArbs = [
-    { header: 'Nombre', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
+    { header: 'Nombre', key: 'nombre', cell: r => <strong>{nombreCompleto(r)}</strong> },
     { header: 'Provincia', key: 'provincia' },
     { header: 'Club', key: 'club' },
     { header: 'FEPAKA ID', key: 'fepaka_id', cell: r => <code>{r.fepaka_id}</code> },
@@ -394,7 +404,7 @@ export default function Admin() {
                   : arbsFilt.length === 0
                     ? <Empty icon="🔍" title="Sin resultados" />
                     : arbsFilt.map(a => (
-                      <AssignItem key={a.id} name={a.nombre}
+                      <AssignItem key={a.id} name={nombreCompleto(a)}
                         sub={`${a.provincia} · ${a.licencia} · ${a.fepaka_id}`}
                         assigned={arbsAsig.includes(a.id)}
                         onToggle={() => toggleArbitro(a.id)}
@@ -453,7 +463,7 @@ export default function Admin() {
                         <div style={{ width: 52, height: 52, borderRadius: 10, background: 'var(--light)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--gray2)', overflow: 'hidden' }}>
                           {arbActual.foto_url
                             ? <img src={`${apiBase}${arbActual.foto_url}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : arbActual.nombre.split(' ').map(x => x[0]).join('').substring(0, 2).toUpperCase()
+                            : nombreCompleto(arbActual).split(' ').map(x => x[0]).join('').substring(0, 2).toUpperCase()
                           }
                         </div>
                         <div>
