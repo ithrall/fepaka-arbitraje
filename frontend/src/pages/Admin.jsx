@@ -7,6 +7,7 @@ import { Button, Badge, Empty, ErrorState, ToastContainer, ScorePill } from '../
 import { Field, Input, Select } from '../components/forms'
 import { Card, StatCard, Table, ProgressBar, AssignItem, CriteriaCard, ScorePanel, EventoBanner as EvBanner } from '../components/data'
 import api from '../api'
+import { CRITERIOS, ESTADOS, nombreCompleto } from '../utils/criterios'
 
 const LICENCIAS = ['Nacional A','Nacional B','Nacional C','Provincial A','Provincial B','Provincial C']
 const CRITERIOS = [
@@ -300,15 +301,13 @@ export default function Admin() {
     { header: 'FEPAKA ID', key: 'fepaka_id', cell: r => <code>{r.fepaka_id}</code> },
     { header: 'Licencia', key: 'licencia', cell: r => <Badge variant="blue">{r.licencia}</Badge> },
   ]
+  const modalidadRes = evRes?.modalidad || 'kumite'
+  const criteriosRes = CRITERIOS[modalidadRes] || CRITERIOS.kumite
   const colsRes = [
     { header: 'Árbitro', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
     { header: 'Provincia', key: 'provincia' },
     { header: 'Licencia', key: 'licencia', cell: r => <Badge variant="blue">{r.licencia}</Badge> },
-    { header: 'Conform.', key: 'prom_conformidad', cell: r => r.prom_conformidad || '—' },
-    { header: 'Tatami', key: 'prom_tatami', cell: r => r.prom_tatami || '—' },
-    { header: 'Instruc.', key: 'prom_instrucciones', cell: r => r.prom_instrucciones || '—' },
-    { header: 'Reglam.', key: 'prom_reglamento', cell: r => r.prom_reglamento || '—' },
-    { header: 'Presencia', key: 'prom_presencia', cell: r => r.prom_presencia || '—' },
+    ...criteriosRes.map(c => ({ header: c.short, key: 'prom_' + c.key, cell: r => r['prom_' + c.key] || '—' })),
     { header: 'Promedio', key: 'promedio_total', cell: r => <ScorePill value={r.promedio_total} /> },
     { header: 'Eval.', key: 'num_evaluaciones', cell: r => <span style={{ color: 'var(--gray)', fontSize: 12 }}>{r.num_evaluaciones}</span> },
   ]
@@ -356,10 +355,24 @@ export default function Admin() {
               <Table
                 columns={[
                   { header: 'Evento', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
+                  { header: 'Modalidad', key: 'modalidad', cell: r => (
+                    <Badge variant={r.modalidad === 'kata' ? 'blue' : 'gold'}>{r.modalidad?.toUpperCase() || 'KUMITE'}</Badge>
+                  )},
                   { header: 'Fecha', key: 'fecha', cell: r => r.fecha ? new Date(r.fecha).toLocaleDateString('es-ES') : '—' },
-                  { header: 'Sede', key: 'sede', cell: r => r.sede || '—' },
-                  { header: 'Estado', key: 'estado', cell: r => <Badge variant={r.estado === 'activo' ? 'green' : 'gold'}>{r.estado}</Badge> },
-                  { header: 'Acción', key: '_', cell: r => <Button size="xs" variant="secondary" onClick={() => handleSelectSub(r, 'arb')}>Gestionar</Button> },
+                  { header: 'Estado', key: 'estado', cell: r => {
+                    const v = r.estado === 'activo' ? 'green' : r.estado === 'finalizado' ? 'red' : r.estado === 'detenido' ? 'gold' : 'blue'
+                    return <Badge variant={v}>{r.estado}</Badge>
+                  }},
+                  { header: 'Cambiar estado', key: '_est', cell: r => (
+                    <select defaultValue={r.estado}
+                      onChange={async e => { await api.patch('/eventos/' + r.id + '/estado', { estado: e.target.value }); refreshEvs() }}
+                      style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12, fontFamily: 'var(--font)', cursor: 'pointer' }}>
+                      <option value="activo">Activo</option>
+                      <option value="detenido">Detenido</option>
+                      <option value="finalizado">Finalizado</option>
+                    </select>
+                  )},
+                  { header: 'Acción', key: '_acc', cell: r => <Button size="xs" variant="secondary" onClick={() => handleSelectSub(r, 'arb')}>Gestionar</Button> },
                 ]}
                 rows={eventos} loading={loadEvs} keyExtractor={r => r.id}
                 empty={<Empty icon="📅" title="Sin eventos" description="Crea el primer evento." />}
@@ -376,7 +389,16 @@ export default function Admin() {
               <form onSubmit={handleCrearEvento}>
                 <div className="row2">
                   <Field label="Nombre del evento" required><Input name="nombre" placeholder="Panamericano Panamá 2026" required /></Field>
-                  <Field label="Fecha"><Input name="fecha" type="date" /></Field>
+                  <Field label="Modalidad" required>
+                    <Select name="modalidad" defaultValue="kumite">
+                      <option value="kumite">Kumite</option>
+                      <option value="kata">Kata</option>
+                    </Select>
+                  </Field>
+                </div>
+                <div className="row2">
+                  <Field label="Fecha inicio"><Input name="fecha" type="date" /></Field>
+                  <Field label="Fecha fin"><Input name="fecha_fin" type="date" /></Field>
                 </div>
                 <div className="row2">
                   <Field label="Sede"><Input name="sede" placeholder="Ciudad, País" /></Field>
