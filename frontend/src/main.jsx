@@ -5,6 +5,7 @@ import { AppProvider, useApp } from './context/AppContext'
 import Login from './pages/Login'
 import Admin from './pages/Admin'
 import Evaluar from './pages/Evaluar'
+import Reporte from './pages/Reporte'
 import './styles.css'
 
 function PrivateRoute({ children, adminOnly }) {
@@ -20,6 +21,7 @@ function AppRoutes() {
       <Route path="/" element={<Login />} />
       <Route path="/admin" element={<PrivateRoute adminOnly><Admin /></PrivateRoute>} />
       <Route path="/evaluar" element={<PrivateRoute><Evaluar /></PrivateRoute>} />
+      <Route path="/reporte/:arbitroId" element={<PrivateRoute><Reporte /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

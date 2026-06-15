@@ -134,3 +134,23 @@ input[type=range] { -webkit-appearance: none; appearance: none; }
 /* ── Scrollbar sidebar ── */
 .sidebar-scroll::-webkit-scrollbar { width: 4px; }
 .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+/* ── Responsive móvil ── */
+@media (max-width: 768px) {
+  .app-body { padding: 12px; }
+  .row2, .row3, .row4 { grid-template-columns: 1fr; }
+  .prom-bar { grid-template-columns: repeat(3,1fr) auto; }
+  .sidebar-layout main { margin-left: 0; }
+}
+
+@media (max-width: 480px) {
+  .login-box { padding: 24px 16px; }
+  .prom-bar { grid-template-columns: repeat(2,1fr) auto; font-size: 12px; }
+}
+
+/* ── Print / PDF ── */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; }
+  @page { size: letter; margin: 20mm; }
+}
