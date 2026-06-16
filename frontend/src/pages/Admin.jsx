@@ -8,6 +8,7 @@ import { Field, Input, Select } from '../components/forms'
 import { Card, StatCard, Table, ProgressBar, AssignItem, CriteriaCard, ScorePanel } from '../components/data'
 import api from '../api'
 import { CRITERIOS, LICENCIAS, ESTADOS, nombreCompleto } from '../utils/criterios'
+import EstadisticasGlobales from '../components/EstadisticasGlobales'
 
 export default function Admin() {
   const { config, updateConfig } = useApp()
@@ -643,6 +644,11 @@ export default function Admin() {
         )}
 
         {/* ── CONFIGURACIÓN ── */}
+        {/* ── ESTADÍSTICAS GLOBALES ── */}
+        {activeGlobal === 'stats' && (
+          <EstadisticasGlobales />
+        )}
+
         {activeGlobal === 'config' && (
           <div>
             <PageHeader title="CONFIGURACIÓN" subtitle="Personaliza la apariencia del sistema" />

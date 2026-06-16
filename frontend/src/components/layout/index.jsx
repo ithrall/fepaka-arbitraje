@@ -2,9 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 
-// ─────────────────────────────────────────
-// TOP BAR
-// ─────────────────────────────────────────
+const SIDEBAR_W = 240
+
 export function TopBar() {
   const { user, logout, config } = useApp()
   const nav = useNavigate()
@@ -67,11 +66,6 @@ export function TopBar() {
   )
 }
 
-// ─────────────────────────────────────────
-// SIDEBAR
-// ─────────────────────────────────────────
-const SIDEBAR_W = 240
-
 export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSelectSub, onSelectGlobal, onNewEvento }) {
   const [openEvento, setOpenEvento] = useState(activeEvento?.id || null)
 
@@ -89,6 +83,7 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
   const globalItems = [
     { id: 'bd-arb',  label: 'Base de Árbitros',    icon: '🥋' },
     { id: 'bd-eval', label: 'Base de Evaluadores',  icon: '👤' },
+    { id: 'stats',   label: 'Estadísticas Globales', icon: '📈' },
     { id: 'config',  label: 'Configuración',        icon: '⚙️' },
   ]
 
@@ -100,7 +95,6 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
       display: 'flex', flexDirection: 'column',
       overflowY: 'auto', zIndex: 90,
     }}>
-      {/* Eventos */}
       <div style={{ padding: '16px 12px 6px', fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
         Eventos
       </div>
@@ -109,7 +103,6 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
         const isOpen = openEvento === ev.id
         return (
           <div key={ev.id} style={{ margin: '2px 8px' }}>
-            {/* Evento header */}
             <div
               onClick={() => toggleEvento(ev.id)}
               style={{
@@ -123,7 +116,7 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
             >
               <div style={{
                 width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                background: ev.estado === 'activo' ? 'var(--green)' : 'var(--gold)',
+                background: ev.estado === 'activo' ? 'var(--green)' : ev.estado === 'finalizado' ? 'var(--red)' : 'var(--gold)',
               }} />
               <div style={{
                 fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.75)',
@@ -139,7 +132,6 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
               }}>▶</div>
             </div>
 
-            {/* Sub-items */}
             {isOpen && (
               <div style={{ paddingBottom: 4 }}>
                 {subItems.map(sub => {
@@ -171,7 +163,6 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
         )
       })}
 
-      {/* Nuevo evento */}
       <button
         onClick={onNewEvento}
         style={{
@@ -188,7 +179,6 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
         ＋ Nuevo evento
       </button>
 
-      {/* Separador */}
       <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 12px' }} />
       <div style={{ padding: '8px 12px 6px', fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
         Global
@@ -221,9 +211,6 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
   )
 }
 
-// ─────────────────────────────────────────
-// APP SHELL (layout completo con sidebar)
-// ─────────────────────────────────────────
 export function AppShell({ children, eventos = [], activeEvento, activeSub, activeGlobal, onSelectSub, onSelectGlobal, onNewEvento }) {
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -248,9 +235,6 @@ export function AppShell({ children, eventos = [], activeEvento, activeSub, acti
   )
 }
 
-// ─────────────────────────────────────────
-// EVENTO CONTEXT BANNER
-// ─────────────────────────────────────────
 export function EventoBanner({ evento }) {
   if (!evento) return null
   const fecha = evento.fecha
@@ -277,9 +261,6 @@ export function EventoBanner({ evento }) {
   )
 }
 
-// ─────────────────────────────────────────
-// PAGE HEADER
-// ─────────────────────────────────────────
 export function PageHeader({ title, subtitle, action }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -294,9 +275,6 @@ export function PageHeader({ title, subtitle, action }) {
   )
 }
 
-// ─────────────────────────────────────────
-// CSV DROP ZONE (corregido)
-// ─────────────────────────────────────────
 export function CsvDropZone({ accept, onChange, title, description, hint }) {
   const [drag, setDrag] = useState(false)
 
@@ -332,9 +310,6 @@ export function CsvDropZone({ accept, onChange, title, description, hint }) {
   )
 }
 
-// ─────────────────────────────────────────
-// ESCUDO UPLOAD (corregido)
-// ─────────────────────────────────────────
 export function EscudoUpload({ escudo, onChange, onRemove }) {
   const [drag, setDrag] = useState(false)
 
@@ -350,7 +325,6 @@ export function EscudoUpload({ escudo, onChange, onRemove }) {
 
   return (
     <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-      {/* Preview */}
       <div style={{
         width: 88, height: 88, borderRadius: 14, flexShrink: 0,
         background: 'var(--light)', border: '1px solid var(--border)',
@@ -363,7 +337,6 @@ export function EscudoUpload({ escudo, onChange, onRemove }) {
         }
       </div>
 
-      {/* Upload */}
       <div style={{ flex: 1 }}>
         <label
           style={{
