@@ -80,17 +80,19 @@ export default function Evaluar() {
     } catch {}
   }
 
-  const arb = arbitros[arbIdx]
+  // Si el evaluador tiene un área asignada, SOLO ve y navega esos árbitros.
+  // Si es admin o no tiene área, ve todos los árbitros del evento.
+  const misArbitros = miArea
+    ? arbitros.filter(a => a.area_id === miArea.id)
+    : arbitros
+
+  const arb = misArbitros[arbIdx]
   const arbScores = arb ? (scores[arb.id] || {}) : {}
   const arbComentario = arb ? (comentarios[arb.id] || '') : ''
   const todoCompleto = criterios.every(c => (arbScores[c.key] || 0) > 0)
 
-  const misArbitros = miArea
-    ? arbitros.filter(a => a.area_id === miArea.id)
-    : isAdmin ? arbitros : []
-
   const evaluadosCount = misArbitros.filter(a => guardados[a.id]).length
-  const puedoEvaluarEste = isAdmin || (miArea && arb?.area_id === miArea.id)
+  const puedoEvaluarEste = isAdmin || (miArea && arb?.area_id === miArea.id) || !miArea
 
   function handleScore(criterio, valor) {
     if (!arb) return
@@ -118,7 +120,7 @@ export default function Evaluar() {
       setGuardados(prev => ({ ...prev, [arb.id]: true }))
       toast.success(`✓ ${nombreCompleto(arb)} — ${modalidad.toUpperCase()} guardado`)
       setTimeout(() => {
-        if (arbIdx < arbitros.length - 1) setArbIdx(i => i + 1)
+        if (arbIdx < misArbitros.length - 1) setArbIdx(i => i + 1)
       }, 1200)
     } catch (err) { toast.error(err.response?.data?.error || 'Error al guardar') }
     finally { setSaving(false) }
@@ -207,11 +209,11 @@ export default function Evaluar() {
             </div>
           )}
 
-          {arbitros.length === 0 && (
+          {misArbitros.length === 0 && (
             <Empty icon="🥋" title="Sin árbitros asignados" description="El administrador debe asignar árbitros al evento." />
           )}
 
-          {arbitros.length > 0 && arb && (
+          {misArbitros.length > 0 && arb && (
             <>
               <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
                 <ProgressBar value={evaluadosCount} max={misArbitros.length || 1}
@@ -242,13 +244,13 @@ export default function Evaluar() {
                 </div>
 
                 <div style={{ textAlign: 'center', flexShrink: 0 }}>
-                  <div style={{ fontSize: 12, color: 'var(--gray)' }}>{arbIdx+1}/{arbitros.length}</div>
+                  <div style={{ fontSize: 12, color: 'var(--gray)' }}>{arbIdx+1}/{misArbitros.length}</div>
                   <div style={{ fontSize: 11, marginTop: 2, color: guardados[arb.id] ? 'var(--green)' : 'var(--gray2)' }}>
                     {guardados[arb.id] ? '✓ Eval.' : 'Pendiente'}
                   </div>
                 </div>
 
-                <button onClick={() => setArbIdx(i => Math.min(arbitros.length-1, i+1))} disabled={arbIdx === arbitros.length-1}
+                <button onClick={() => setArbIdx(i => Math.min(misArbitros.length-1, i+1))} disabled={arbIdx === misArbitros.length-1}
                   style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'white', cursor: arbIdx===arbitros.length-1?'not-allowed':'pointer', opacity: arbIdx===arbitros.length-1?0.3:1, fontSize: 16, flexShrink: 0 }}>→</button>
               </div>
 

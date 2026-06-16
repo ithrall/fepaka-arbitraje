@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 
 const SIDEBAR_W = 240
 
-export function TopBar() {
+export function TopBar({ onHome } = {}) {
   const { user, logout, config } = useApp()
   const nav = useNavigate()
 
@@ -15,7 +15,9 @@ export function TopBar() {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 20px', borderBottom: '1px solid rgba(255,255,255,0.06)',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: onHome ? 'pointer' : 'default' }}
+        onClick={onHome}
+        title={onHome ? 'Volver al inicio' : ''}>
         <div style={{
           width: 32, height: 32, borderRadius: 7,
           background: config.escudo ? 'transparent' : 'var(--red)',
@@ -37,6 +39,18 @@ export function TopBar() {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {onHome && (
+          <button onClick={onHome} style={{
+            padding: '5px 14px', background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.15)', borderRadius: 20,
+            color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+            fontFamily: 'var(--font)', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6,
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.16)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}>
+            🏠 Inicio
+          </button>
+        )}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'rgba(255,255,255,0.06)', borderRadius: 20, padding: '4px 12px 4px 4px',
@@ -76,6 +90,7 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
   const subItems = [
     { id: 'arb',     label: 'Árbitros',    icon: '🥋' },
     { id: 'eval',    label: 'Evaluadores', icon: '👤' },
+    { id: 'areas',   label: 'Áreas',       icon: '📍' },
     { id: 'evaluar', label: 'Evaluar',     icon: '▶'  },
     { id: 'res',     label: 'Resultados',  icon: '📊' },
   ]
@@ -211,10 +226,10 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
   )
 }
 
-export function AppShell({ children, eventos = [], activeEvento, activeSub, activeGlobal, onSelectSub, onSelectGlobal, onNewEvento }) {
+export function AppShell({ children, eventos = [], activeEvento, activeSub, activeGlobal, onSelectSub, onSelectGlobal, onNewEvento, onHome }) {
   return (
     <div style={{ minHeight: '100vh' }}>
-      <TopBar />
+      <TopBar onHome={onHome} />
       <Sidebar
         eventos={eventos}
         activeEvento={activeEvento}

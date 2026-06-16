@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useAsync, useToast, useDebounce } from '../hooks/useAsync'
 import { AppShell, EventoBanner, PageHeader, CsvDropZone, EscudoUpload } from '../components/layout'
-import { Button, Badge, Empty, ErrorState, ToastContainer, ScorePill } from '../components/ui'
+import { Button, Badge, Empty, ToastContainer, ScorePill, Spinner } from '../components/ui'
 import { Field, Input, Select } from '../components/forms'
 import { Card, StatCard, Table, ProgressBar, AssignItem, CriteriaCard, ScorePanel } from '../components/data'
 import api from '../api'
@@ -15,10 +15,10 @@ export default function Admin() {
   const { toasts, toast } = useToast()
   const nav = useNavigate()
 
-  // ── Navegación sidebar ──
+  // ── Navegación ──
   const [activeEvento, setActiveEvento] = useState(null)
-  const [activeSub, setActiveSub] = useState(null)    // 'arb' | 'eval' | 'evaluar' | 'res'
-  const [activeGlobal, setActiveGlobal] = useState(null) // 'bd-arb' | 'bd-eval' | 'config'
+  const [activeSub, setActiveSub] = useState(null)
+  const [activeGlobal, setActiveGlobal] = useState(null)
   const [showNewEvento, setShowNewEvento] = useState(false)
 
   // ── Datos globales ──
@@ -29,12 +29,19 @@ export default function Admin() {
   const { data: bdUsuarios, loading: loadUsers, refresh: refreshUsers } =
     useAsync(() => api.get('/usuarios').then(r => r.data), [])
 
-  // ── Estado de asignación ──
+  // ── Asignación evento ──
   const [arbsAsig, setArbsAsig] = useState([])
   const [evalsAsig, setEvalsAsig] = useState([])
   const [loadingAsig, setLoadingAsig] = useState(false)
 
-  // ── Estado evaluación (modo admin evalúa) ──
+  // ── Áreas ──
+  const [areas, setAreas] = useState([])
+  const [loadingAreas, setLoadingAreas] = useState(false)
+  const [nuevaAreaNombre, setNuevaAreaNombre] = useState('')
+  const [areaExpandida, setAreaExpandida] = useState(null)
+  const [busqAreaArb, setBusqAreaArb] = useState('')
+
+  // ── Evaluación (modo admin) ──
   const [arbIdx, setArbIdx] = useState(0)
   const [modalidadEval, setModalidadEval] = useState('kumite')
   const [modalidadRes, setModalidadRes] = useState('kumite')
@@ -60,25 +67,23 @@ export default function Admin() {
   const busqArbD = useDebounce(busqArb)
   const busqEvalD = useDebounce(busqEval)
 
-  // ── Cargar asignaciones cuando cambia evento/sub ──
+  // ── Effects ──
   useEffect(() => {
-    if (!activeEvento || activeSub !== 'arb' && activeSub !== 'eval') return
-    cargarAsignaciones(activeEvento.id)
+    if (!activeEvento) return
+    if (activeSub === 'arb' || activeSub === 'eval') cargarAsignaciones(activeEvento.id)
+    if (activeSub === 'areas') cargarAreas(activeEvento.id)
   }, [activeEvento?.id, activeSub])
 
-  // ── Cargar resultados (recarga al cambiar evento, sección o modalidad) ──
   useEffect(() => {
     if (!activeEvento || activeSub !== 'res') return
     cargarResultados(activeEvento.id, modalidadRes)
   }, [activeEvento?.id, activeSub, modalidadRes])
 
-  // ── Iniciar evaluación ──
   useEffect(() => {
     if (!activeEvento || activeSub !== 'evaluar') return
     setArbIdx(0)
   }, [activeEvento?.id, activeSub])
 
-  // ── Cargar eval existente al cambiar árbitro o modalidad ──
   const arbsDelEvento = activeEvento
     ? (bdArbitros || []).filter(a => arbsAsig.includes(a.id))
     : []
@@ -98,14 +103,22 @@ export default function Admin() {
       }).catch(() => {})
   }, [arbIdx, activeEvento?.id, activeSub, modalidadEval])
 
-  // ── Handlers navegación ──
+  // ── Navegación ──
+  function goHome() {
+    setActiveEvento(null)
+    setActiveSub(null)
+    setActiveGlobal(null)
+    setShowNewEvento(false)
+  }
+
   function handleSelectSub(ev, sub) {
     setActiveEvento(ev)
     setActiveSub(sub)
     setActiveGlobal(null)
     setShowNewEvento(false)
-    setBusqArb(''); setBusqEval('')
+    setBusqArb(''); setBusqEval(''); setBusqAreaArb('')
     if (sub === 'arb' || sub === 'eval') cargarAsignaciones(ev.id)
+    if (sub === 'areas') cargarAreas(ev.id)
     if (sub === 'res') cargarResultados(ev.id, modalidadRes)
     if (sub === 'evaluar') { setArbIdx(0); setGuardados({}); cargarAsignaciones(ev.id) }
   }
@@ -121,8 +134,10 @@ export default function Admin() {
     setShowNewEvento(true)
     setActiveSub(null)
     setActiveGlobal(null)
+    setActiveEvento(null)
   }
 
+  // ── Cargar datos ──
   async function cargarAsignaciones(evId) {
     setLoadingAsig(true)
     try {
@@ -134,6 +149,15 @@ export default function Admin() {
       setEvalsAsig(re.data.map(u => u.id))
     } catch { toast.error('Error al cargar asignaciones') }
     finally { setLoadingAsig(false) }
+  }
+
+  async function cargarAreas(evId) {
+    setLoadingAreas(true)
+    try {
+      const { data } = await api.get(`/areas/evento/${evId}`)
+      setAreas(data)
+    } catch { toast.error('Error al cargar áreas') }
+    finally { setLoadingAreas(false) }
   }
 
   async function cargarResultados(evId, modalidad) {
@@ -155,7 +179,7 @@ export default function Admin() {
       e.target.reset(); await refreshEvs()
       toast.success(`✓ Evento "${data.nombre}" creado`)
       setShowNewEvento(false)
-    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+    } catch (err) { toast.error(err.response?.data?.error || 'Error al crear evento') }
   }
 
   // ── Handlers Árbitros ──
@@ -219,7 +243,7 @@ export default function Admin() {
     } catch (err) { setPwErr(err.response?.data?.error || 'Error') }
   }
 
-  // ── Handlers Asignación ──
+  // ── Handlers Asignación evento ──
   async function toggleArbitro(arbId) {
     if (!activeEvento) return
     const on = arbsAsig.includes(arbId)
@@ -240,7 +264,50 @@ export default function Admin() {
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
-  // ── Handlers Evaluación ──
+  // ── Handlers Áreas ──
+  async function crearArea() {
+    if (!nuevaAreaNombre.trim()) { toast.error('Escribe el nombre del área'); return }
+    try {
+      await api.post('/areas', { evento_id: activeEvento.id, nombre: nuevaAreaNombre.trim() })
+      setNuevaAreaNombre('')
+      await cargarAreas(activeEvento.id)
+      toast.success('✓ Área creada')
+    } catch (err) { toast.error(err.response?.data?.error || 'Error al crear área') }
+  }
+
+  async function eliminarArea(areaId) {
+    try {
+      await api.delete(`/areas/${areaId}`)
+      await cargarAreas(activeEvento.id)
+      toast.success('Área eliminada')
+    } catch { toast.error('Error al eliminar área') }
+  }
+
+  async function asignarJefe(areaId, jefeId, nombreArea) {
+    try {
+      await api.put(`/areas/${areaId}`, { nombre: nombreArea, jefe_id: jefeId || null })
+      await cargarAreas(activeEvento.id)
+      toast.success('✓ Jefe de área actualizado')
+    } catch { toast.error('Error al asignar jefe') }
+  }
+
+  async function asignarArbitroAArea(areaId, arbitroId) {
+    try {
+      await api.post(`/areas/${areaId}/arbitros`, { arbitro_id: arbitroId, evento_id: activeEvento.id })
+      await cargarAreas(activeEvento.id)
+      toast.success('✓ Árbitro asignado al área')
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+
+  async function quitarArbitroDeArea(areaId, arbitroId) {
+    try {
+      await api.delete(`/areas/${areaId}/arbitros/${arbitroId}`)
+      await cargarAreas(activeEvento.id)
+      toast.success('Árbitro removido del área')
+    } catch { toast.error('Error') }
+  }
+
+  // ── Handlers Evaluación admin ──
   const arbActual = arbsDelEvento[arbIdx]
   const arbScores = arbActual ? (scores[arbActual.id] || {}) : {}
   const arbComentario = arbActual ? (comentarios[arbActual.id] || '') : ''
@@ -254,7 +321,7 @@ export default function Admin() {
   }
 
   async function guardarEval() {
-    if (!todoCompleto) { toast.error('Evalúa los 5 criterios antes de guardar'); return }
+    if (!todoCompleto) { toast.error('Evalúa todos los criterios antes de guardar'); return }
     setSaving(true)
     try {
       await api.post('/evaluaciones', {
@@ -263,20 +330,17 @@ export default function Admin() {
         ...arbScores, comentario: arbComentario || null,
       })
       setGuardados(prev => ({ ...prev, [arbActual.id]: true }))
-      toast.success(`✓ ${arbActual.nombre} evaluado`)
+      toast.success(`✓ ${nombreCompleto(arbActual)} evaluado`)
       setTimeout(() => { if (arbIdx < arbsDelEvento.length - 1) setArbIdx(i => i + 1) }, 1200)
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setSaving(false) }
   }
 
   // ── Filtros ──
-  const arbsFilt = (bdArbitros || []).filter(a => {
-    if (!busqArbD) return true
-    const q = busqArbD.toLowerCase()
-    return nombreCompleto(a).toLowerCase().includes(q) ||
-           a.fepaka_id?.toLowerCase().includes(q) ||
-           a.provincia?.toLowerCase().includes(q)
-  })
+  const arbsFilt = (bdArbitros || []).filter(a =>
+    !busqArbD || nombreCompleto(a).toLowerCase().includes(busqArbD.toLowerCase()) ||
+    a.fepaka_id?.toLowerCase().includes(busqArbD.toLowerCase())
+  )
   const evalsFilt = (bdUsuarios || []).filter(u =>
     !busqEvalD || u.nombre.toLowerCase().includes(busqEvalD.toLowerCase()) ||
     u.username?.toLowerCase().includes(busqEvalD.toLowerCase())
@@ -289,20 +353,27 @@ export default function Admin() {
     { header: 'Club', key: 'club' },
     { header: 'FEPAKA ID', key: 'fepaka_id', cell: r => <code>{r.fepaka_id}</code> },
     { header: 'Licencia', key: 'licencia', cell: r => <Badge variant="blue">{r.licencia}</Badge> },
+    { header: 'Reporte', key: '_rep', cell: r => (
+      <Button size="xs" variant="secondary" onClick={() => window.open(`/reporte/${r.id}`, '_blank')}>📄 Ver reporte</Button>
+    )},
   ]
-  const criteriosRes = CRITERIOS[modalidadRes] || CRITERIOS.kumite
+
+  const modalidadResCrits = CRITERIOS[modalidadRes] || CRITERIOS.kumite
   const colsRes = [
-    { header: 'Árbitro', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
+    { header: 'Árbitro', key: 'nombre_completo', cell: r => <strong>{r.nombre_completo}</strong> },
     { header: 'Provincia', key: 'provincia' },
     { header: 'Licencia', key: 'licencia', cell: r => <Badge variant="blue">{r.licencia}</Badge> },
-    ...criteriosRes.map(c => ({ header: c.short, key: 'prom_' + c.key, cell: r => r['prom_' + c.key] || '—' })),
+    { header: 'Área', key: 'area_nombre', cell: r => r.area_nombre ? <Badge variant="gray">{r.area_nombre}</Badge> : '—' },
+    ...modalidadResCrits.map(c => ({ header: c.short, key: `prom_${c.key}`, cell: r => r[`prom_${c.key}`] || '—' })),
     { header: 'Promedio', key: 'promedio_total', cell: r => <ScorePill value={r.promedio_total} /> },
     { header: 'Eval.', key: 'num_evaluaciones', cell: r => <span style={{ color: 'var(--gray)', fontSize: 12 }}>{r.num_evaluaciones}</span> },
   ]
+
   const colsDet = [
     { header: 'Árbitro', key: 'arbitro_nombre', cell: r => <><strong>{r.arbitro_nombre}</strong><br/><span style={{ fontSize: 11, color: 'var(--gray2)' }}>{r.licencia}</span></> },
     { header: 'Evaluador', key: 'evaluador_nombre' },
-    ...criteriosRes.map(c => ({ header: c.short, key: c.key, cell: r => r[c.key] ? parseFloat(r[c.key]).toFixed(1) : '—' })),
+    { header: 'Área', key: 'area_nombre', cell: r => r.area_nombre || '—' },
+    ...modalidadResCrits.map(c => ({ header: c.short, key: c.key, cell: r => r[c.key] ? parseFloat(r[c.key]).toFixed(1) : '—' })),
     { header: 'Prom.', key: 'promedio_evaluador', cell: r => <ScorePill value={r.promedio_evaluador} /> },
     { header: 'Comentario', key: 'comentario', cell: r => (
       <span style={{ fontSize: 12, color: 'var(--gray)', fontStyle: r.comentario ? 'normal' : 'italic', maxWidth: 180, display: 'block' }}>
@@ -312,6 +383,10 @@ export default function Admin() {
   ]
 
   const apiBase = (import.meta.env.VITE_API_URL || '').replace('/api', '')
+
+  // Árbitros asignados al evento (objetos completos) para usar en sección Áreas
+  const arbitrosEventoCompletos = (bdArbitros || []).filter(a => arbsAsig.includes(a.id))
+  const evaluadoresEventoCompletos = (bdUsuarios || []).filter(u => evalsAsig.includes(u.id))
 
   return (
     <>
@@ -324,39 +399,45 @@ export default function Admin() {
         onSelectSub={handleSelectSub}
         onSelectGlobal={handleSelectGlobal}
         onNewEvento={handleNewEvento}
+        onHome={goHome}
       >
-
-        {/* ── BIENVENIDA ── */}
+        {/* ── BIENVENIDA / HOME ── */}
         {!activeSub && !activeGlobal && !showNewEvento && (
           <div>
-            <PageHeader title="BIENVENIDO" subtitle="Selecciona un evento del panel izquierdo para comenzar" />
+            <PageHeader title="BIENVENIDO" subtitle="Selecciona un evento del panel izquierdo, o gestiona todos los eventos aquí" />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
               <StatCard label="Eventos" value={eventos?.length || 0} icon="📅" />
               <StatCard label="Árbitros" value={bdArbitros?.length || 0} icon="🥋" />
               <StatCard label="Evaluadores" value={bdUsuarios?.length || 0} icon="👤" />
             </div>
-            <Card title="EVENTOS REGISTRADOS">
+            <Card title="TODOS LOS EVENTOS"
+              action={<Button size="sm" variant="primary" onClick={handleNewEvento}>＋ Nuevo evento</Button>}>
               <Table
                 columns={[
                   { header: 'Evento', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
                   { header: 'Fecha', key: 'fecha', cell: r => r.fecha ? new Date(r.fecha).toLocaleDateString('es-ES') : '—' },
+                  { header: 'Sede', key: 'sede', cell: r => r.sede || '—' },
                   { header: 'Estado', key: 'estado', cell: r => {
                     const v = r.estado === 'activo' ? 'green' : r.estado === 'finalizado' ? 'red' : r.estado === 'detenido' ? 'gold' : 'blue'
                     return <Badge variant={v}>{r.estado}</Badge>
                   }},
                   { header: 'Cambiar estado', key: '_est', cell: r => (
                     <select defaultValue={r.estado}
-                      onChange={async e => { await api.patch('/eventos/' + r.id + '/estado', { estado: e.target.value }); refreshEvs() }}
+                      onChange={async e => { await api.patch(`/eventos/${r.id}/estado`, { estado: e.target.value }); refreshEvs() }}
                       style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12, fontFamily: 'var(--font)', cursor: 'pointer' }}>
                       <option value="activo">Activo</option>
                       <option value="detenido">Detenido</option>
                       <option value="finalizado">Finalizado</option>
                     </select>
                   )},
-                  { header: 'Acción', key: '_acc', cell: r => <Button size="xs" variant="secondary" onClick={() => handleSelectSub(r, 'arb')}>Gestionar</Button> },
+                  { header: 'Acción', key: '_acc', cell: r => (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <Button size="xs" variant="secondary" onClick={() => handleSelectSub(r, 'arb')}>Gestionar</Button>
+                    </div>
+                  )},
                 ]}
                 rows={eventos} loading={loadEvs} keyExtractor={r => r.id}
-                empty={<Empty icon="📅" title="Sin eventos" description="Crea el primer evento." />}
+                empty={<Empty icon="📅" title="Sin eventos" description="Crea el primer evento arriba." />}
               />
             </Card>
           </div>
@@ -365,7 +446,7 @@ export default function Admin() {
         {/* ── NUEVO EVENTO ── */}
         {showNewEvento && (
           <div>
-            <PageHeader title="CREAR NUEVO EVENTO" subtitle="Los árbitros y evaluadores se asignan después" />
+            <PageHeader title="CREAR NUEVO EVENTO" subtitle="Los árbitros, evaluadores y áreas se asignan después" />
             <Card>
               <form onSubmit={handleCrearEvento}>
                 <div className="row2">
@@ -382,7 +463,7 @@ export default function Admin() {
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Button type="submit" variant="primary">Crear evento</Button>
-                  <Button type="button" variant="secondary" onClick={() => setShowNewEvento(false)}>Cancelar</Button>
+                  <Button type="button" variant="secondary" onClick={goHome}>Cancelar</Button>
                 </div>
               </form>
             </Card>
@@ -441,23 +522,116 @@ export default function Admin() {
           </div>
         )}
 
+        {/* ── ÁREAS DEL EVENTO ── */}
+        {activeSub === 'areas' && activeEvento && (
+          <div>
+            <EventoBanner evento={activeEvento} />
+            <PageHeader title="ÁREAS / TATAMIS" subtitle="Crea áreas, asigna un jefe (evaluador) y asigna árbitros a cada área" />
+
+            <Card title="CREAR NUEVA ÁREA">
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Input value={nuevaAreaNombre} onChange={e => setNuevaAreaNombre(e.target.value)}
+                  placeholder="Ej: Área 1, Tatami A, Cancha Principal..." style={{ flex: 1 }} />
+                <Button variant="primary" onClick={crearArea}>＋ Crear área</Button>
+              </div>
+            </Card>
+
+            {evaluadoresEventoCompletos.length === 0 && (
+              <div style={{ background: 'var(--gold-light)', border: '1px solid var(--gold)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#92400E' }}>
+                ⚠ No hay evaluadores asignados a este evento aún. Ve a la pestaña <strong>Evaluadores</strong> primero para poder asignar jefes de área.
+              </div>
+            )}
+            {arbitrosEventoCompletos.length === 0 && (
+              <div style={{ background: 'var(--gold-light)', border: '1px solid var(--gold)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#92400E' }}>
+                ⚠ No hay árbitros asignados a este evento aún. Ve a la pestaña <strong>Árbitros</strong> primero.
+              </div>
+            )}
+
+            {loadingAreas ? (
+              <div style={{ padding: 40, textAlign: 'center' }}><Spinner size={28} /></div>
+            ) : areas.length === 0 ? (
+              <Empty icon="📍" title="Sin áreas creadas" description="Crea la primera área arriba para empezar a organizar el panel arbitral." />
+            ) : (
+              areas.map(area => {
+                const arbsEnArea = area.arbitros || []
+                const arbsSinArea = arbitrosEventoCompletos.filter(a =>
+                  !areas.some(ar => (ar.arbitros || []).some(x => x.id === a.id))
+                )
+                const candidatos = [...arbsEnArea.map(x => ({ ...x, _enEsta: true })), ...arbsSinArea.map(x => ({ ...x, _enEsta: false }))]
+                  .filter(a => !busqAreaArb || nombreCompleto(a).toLowerCase().includes(busqAreaArb.toLowerCase()))
+
+                return (
+                  <Card key={area.id} style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, letterSpacing: '1px' }}>{area.nombre}</div>
+                        <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 2 }}>{arbsEnArea.length} árbitro(s) asignado(s)</div>
+                      </div>
+                      <Button size="xs" variant="danger" onClick={() => eliminarArea(area.id)}>🗑 Eliminar área</Button>
+                    </div>
+
+                    {/* Jefe de área */}
+                    <div style={{ marginBottom: 14 }}>
+                      <Field label="Jefe de área (evaluador)">
+                        <Select
+                          value={area.jefe_id || ''}
+                          onChange={e => asignarJefe(area.id, e.target.value ? parseInt(e.target.value) : null, area.nombre)}
+                        >
+                          <option value="">— Sin asignar —</option>
+                          {evaluadoresEventoCompletos.map(u => (
+                            <option key={u.id} value={u.id}>{u.nombre} ({u.username})</option>
+                          ))}
+                        </Select>
+                      </Field>
+                      {area.jefe_nombre && (
+                        <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 4 }}>
+                          ✓ Jefe actual: <strong>{area.jefe_nombre}</strong>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Árbitros del área */}
+                    <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--gray)', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 8 }}>
+                      Panel arbitral de esta área
+                    </div>
+                    <Input value={busqAreaArb} onChange={e => setBusqAreaArb(e.target.value)}
+                      placeholder="Buscar árbitro para asignar..." icon="🔍" style={{ marginBottom: 8 }} />
+                    <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+                      {candidatos.length === 0 ? (
+                        <Empty icon="🥋" title="Sin árbitros disponibles" description="Asigna árbitros al evento primero." />
+                      ) : candidatos.map(a => (
+                        <div key={a.id} style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '9px 14px', borderBottom: '1px solid var(--border)',
+                          background: a._enEsta ? 'var(--green-light)' : 'white',
+                        }}>
+                          <div>
+                            <div style={{ fontWeight: 500, fontSize: 13 }}>{nombreCompleto(a)}</div>
+                            <div style={{ fontSize: 11, color: 'var(--gray2)', marginTop: 1 }}>{a.provincia} · {a.licencia}</div>
+                          </div>
+                          {a._enEsta ? (
+                            <Button size="xs" variant="secondary" onClick={() => quitarArbitroDeArea(area.id, a.id)}>Quitar</Button>
+                          ) : (
+                            <Button size="xs" variant="primary" onClick={() => asignarArbitroAArea(area.id, a.id)}>+ Asignar aquí</Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )
+              })
+            )}
+          </div>
+        )}
+
         {/* ── EVALUAR (modo admin) ── */}
         {activeSub === 'evaluar' && activeEvento && (
           <div>
             <EventoBanner evento={activeEvento} />
-
-            {/* Selector libre de modalidad */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-              <Button variant={modalidadEval === 'kumite' ? 'primary' : 'secondary'}
-                onClick={() => { setModalidadEval('kumite'); setGuardados({}) }}>
-                🥋 Kumite
-              </Button>
-              <Button variant={modalidadEval === 'kata' ? 'primary' : 'secondary'}
-                onClick={() => { setModalidadEval('kata'); setGuardados({}) }}>
-                🥋 Kata
-              </Button>
+              <Button variant={modalidadEval === 'kumite' ? 'primary' : 'secondary'} onClick={() => { setModalidadEval('kumite'); setGuardados({}) }}>🥋 Kumite</Button>
+              <Button variant={modalidadEval === 'kata' ? 'primary' : 'secondary'} onClick={() => { setModalidadEval('kata'); setGuardados({}) }}>🥋 Kata</Button>
             </div>
-
             {arbsDelEvento.length === 0
               ? <Empty icon="🥋" title="Sin árbitros asignados" description="Asigna árbitros al evento primero." />
               : <>
@@ -478,7 +652,7 @@ export default function Admin() {
                           }
                         </div>
                         <div>
-                          <div style={{ fontSize: 15, fontWeight: 600 }}>{arbActual.nombre}</div>
+                          <div style={{ fontSize: 15, fontWeight: 600 }}>{nombreCompleto(arbActual)}</div>
                           <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 2 }}>{arbActual.provincia} · {arbActual.licencia}</div>
                           <div style={{ fontSize: 11, color: 'var(--gray2)', marginTop: 1 }}>{arbActual.club} · {arbActual.fepaka_id}</div>
                         </div>
@@ -509,7 +683,7 @@ export default function Admin() {
                     </div>
                     <Button variant={todoCompleto ? 'success' : 'secondary'} fullWidth size="lg"
                       onClick={guardarEval} loading={saving} disabled={!todoCompleto}>
-                      {todoCompleto ? 'Guardar y continuar →' : 'Completa los 5 criterios para guardar'}
+                      {todoCompleto ? 'Guardar y continuar →' : 'Completa los criterios para guardar'}
                     </Button>
                   </>
                 )}
@@ -532,13 +706,13 @@ export default function Admin() {
             </div>
             {vistaRes === 'resumen' && (
               <Card title={`PROMEDIOS GENERALES — ${modalidadRes.toUpperCase()}`}>
-                <Table columns={colsRes} rows={resultados.filter(r => true)} keyExtractor={r => r.id}
+                <Table columns={colsRes} rows={resultados} keyExtractor={r => r.id}
                   empty={<Empty icon="📊" title="Sin evaluaciones" description="No hay evaluaciones guardadas aún." />} />
               </Card>
             )}
             {vistaRes === 'detalle' && (
               <Card title={`POR EVALUADOR — ${modalidadRes.toUpperCase()}`}>
-                <Table columns={colsDet} rows={detalle.filter(r => r.modalidad === modalidadRes)} keyExtractor={r => r.id}
+                <Table columns={colsDet} rows={detalle} keyExtractor={r => r.id}
                   empty={<Empty icon="👤" title="Sin evaluaciones individuales" />} />
               </Card>
             )}
@@ -605,19 +779,23 @@ export default function Admin() {
                 ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--gray)' }}>Cargando...</div>
                 : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead><tr>{['Nombre','Usuario','Rol','Estado','Password'].map(h => (
-                    <th key={h} style={{ background:'var(--dark)',color:'rgba(255,255,255,.6)',padding:'9px 14px',textAlign:'left',fontSize:10,letterSpacing:'1px',textTransform:'uppercase',fontWeight:500 }}>{h}</th>
-                  ))}</tr></thead>
+                  <thead>
+                    <tr>
+                      {['Nombre','Usuario','Rol','Estado','Password'].map(h => (
+                        <th key={h} style={{ background:'var(--dark)',color:'rgba(255,255,255,.6)',padding:'9px 14px',textAlign:'left',fontSize:10,letterSpacing:'1px',textTransform:'uppercase',fontWeight:500 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
                   <tbody>
                     {(bdUsuarios || []).map(u => (
                       <tr key={u.id}>
                         <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><strong>{u.nombre}</strong></td>
-                        <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><code style={{fontSize:11,background:'var(--light)',padding:'2px 6px',borderRadius:4}}>{u.username}</code></td>
+                        <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><code>{u.username}</code></td>
                         <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><Badge variant={u.rol==='admin'?'red':'blue'}>{u.rol}</Badge></td>
                         <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}><Badge variant={u.activo?'green':'gold'}>{u.activo?'Activo':'Inactivo'}</Badge></td>
                         <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}>
-                          {pwPanel === u.id ? (
-                            <div style={{ background:'var(--light)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 12px',minWidth:240 }}>
+                          {pwPanel===u.id ? (
+                            <div style={{background:'var(--light)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 12px',minWidth:260}}>
                               <Field label="Nuevo password" error={pwErr}>
                                 <Input type="password" value={pwNew} onChange={e=>{setPwNew(e.target.value);setPwErr('')}} placeholder="Nuevo password" />
                               </Field>
@@ -643,12 +821,10 @@ export default function Admin() {
           </div>
         )}
 
-        {/* ── CONFIGURACIÓN ── */}
         {/* ── ESTADÍSTICAS GLOBALES ── */}
-        {activeGlobal === 'stats' && (
-          <EstadisticasGlobales />
-        )}
+        {activeGlobal === 'stats' && <EstadisticasGlobales />}
 
+        {/* ── CONFIGURACIÓN ── */}
         {activeGlobal === 'config' && (
           <div>
             <PageHeader title="CONFIGURACIÓN" subtitle="Personaliza la apariencia del sistema" />
@@ -662,14 +838,13 @@ export default function Admin() {
             <Card title="NOMBRE DE LA FEDERACIÓN">
               <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ fedNombre: fd.get('fed_nombre') || 'FEPAKA' }); toast.success('✓ Configuración guardada') }}>
                 <Field label="Nombre en el encabezado">
-                  <Input name="fed_nombre" defaultValue={config.fedNombre} style={{ fontSize: 15, fontWeight: 500 }} />
+                  <Input name="fed_nombre" defaultValue={config.fedNombre} style={{ fontSize:15,fontWeight:500 }} />
                 </Field>
                 <Button type="submit" variant="primary">Guardar configuración</Button>
               </form>
             </Card>
           </div>
         )}
-
       </AppShell>
     </>
   )
