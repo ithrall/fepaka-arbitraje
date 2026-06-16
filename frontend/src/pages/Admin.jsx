@@ -9,11 +9,6 @@ import { Card, StatCard, Table, ProgressBar, AssignItem, CriteriaCard, ScorePane
 import api from '../api'
 import { CRITERIOS, LICENCIAS, ESTADOS, nombreCompleto } from '../utils/criterios'
 
-
-
-// Helper: nombre completo del árbitro
-function nombreCompleto(arb) {
-  if (!arb) return ''
   return arb.nombre_completo || (arb.apellido ? `${arb.nombre} ${arb.apellido}` : arb.nombre)
 }
 
