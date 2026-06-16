@@ -35,6 +35,8 @@ export default function Admin() {
 
   // ── Estado evaluación (modo admin evalúa) ──
   const [arbIdx, setArbIdx] = useState(0)
+  const [modalidadEval, setModalidadEval] = useState('kumite')
+  const [modalidadRes, setModalidadRes] = useState('kumite')
   const [scores, setScores] = useState({})
   const [comentarios, setComentarios] = useState({})
   const [guardados, setGuardados] = useState({})
@@ -63,11 +65,11 @@ export default function Admin() {
     cargarAsignaciones(activeEvento.id)
   }, [activeEvento?.id, activeSub])
 
-  // ── Cargar resultados ──
+  // ── Cargar resultados (recarga al cambiar evento, sección o modalidad) ──
   useEffect(() => {
     if (!activeEvento || activeSub !== 'res') return
-    cargarResultados(activeEvento.id)
-  }, [activeEvento?.id, activeSub])
+    cargarResultados(activeEvento.id, modalidadRes)
+  }, [activeEvento?.id, activeSub, modalidadRes])
 
   // ── Iniciar evaluación ──
   useEffect(() => {
@@ -75,7 +77,7 @@ export default function Admin() {
     setArbIdx(0)
   }, [activeEvento?.id, activeSub])
 
-  // ── Cargar eval existente al cambiar árbitro ──
+  // ── Cargar eval existente al cambiar árbitro o modalidad ──
   const arbsDelEvento = activeEvento
     ? (bdArbitros || []).filter(a => arbsAsig.includes(a.id))
     : []
@@ -83,18 +85,17 @@ export default function Admin() {
   useEffect(() => {
     if (!activeEvento || activeSub !== 'evaluar') return
     const arb = arbsDelEvento[arbIdx]
-    if (!arb || guardados[arb.id] !== undefined) return
-    api.get(`/evaluaciones/mia/arbitro/${arb.id}/evento/${activeEvento.id}`)
+    if (!arb) return
+    api.get(`/evaluaciones/mia/arbitro/${arb.id}/evento/${activeEvento.id}?modalidad=${modalidadEval}`)
       .then(r => {
-        if (!r.data) return
+        const crits = CRITERIOS[modalidadEval] || CRITERIOS.kumite
         const s = {}
-        const crits = CRITERIOS[activeEvento?.modalidad || 'kumite'] || CRITERIOS.kumite
-        crits.forEach(c => { s[c.key] = r.data[c.key] ? parseFloat(r.data[c.key]) : 0 })
+        crits.forEach(c => { s[c.key] = r.data && r.data[c.key] ? parseFloat(r.data[c.key]) : 0 })
         setScores(prev => ({ ...prev, [arb.id]: s }))
-        setComentarios(prev => ({ ...prev, [arb.id]: r.data.comentario || '' }))
-        setGuardados(prev => ({ ...prev, [arb.id]: true }))
+        setComentarios(prev => ({ ...prev, [arb.id]: r.data?.comentario || '' }))
+        setGuardados(prev => ({ ...prev, [arb.id]: !!r.data }))
       }).catch(() => {})
-  }, [arbIdx, activeEvento?.id, activeSub])
+  }, [arbIdx, activeEvento?.id, activeSub, modalidadEval])
 
   // ── Handlers navegación ──
   function handleSelectSub(ev, sub) {
@@ -104,8 +105,8 @@ export default function Admin() {
     setShowNewEvento(false)
     setBusqArb(''); setBusqEval('')
     if (sub === 'arb' || sub === 'eval') cargarAsignaciones(ev.id)
-    if (sub === 'res') cargarResultados(ev.id)
-    if (sub === 'evaluar') { setArbIdx(0); cargarAsignaciones(ev.id) }
+    if (sub === 'res') cargarResultados(ev.id, modalidadRes)
+    if (sub === 'evaluar') { setArbIdx(0); setGuardados({}); cargarAsignaciones(ev.id) }
   }
 
   function handleSelectGlobal(id) {
@@ -134,11 +135,11 @@ export default function Admin() {
     finally { setLoadingAsig(false) }
   }
 
-  async function cargarResultados(evId) {
+  async function cargarResultados(evId, modalidad) {
     try {
       const [rr, rd] = await Promise.all([
-        api.get(`/evaluaciones/resumen/evento/${evId}`),
-        api.get(`/evaluaciones/detalle/evento/${evId}`),
+        api.get(`/evaluaciones/resumen/evento/${evId}?modalidad=${modalidad}`),
+        api.get(`/evaluaciones/detalle/evento/${evId}?modalidad=${modalidad}`),
       ])
       setResultados(rr.data.rows || rr.data); setDetalle(rd.data.rows || rd.data)
     } catch { toast.error('Error al cargar resultados') }
@@ -242,7 +243,6 @@ export default function Admin() {
   const arbActual = arbsDelEvento[arbIdx]
   const arbScores = arbActual ? (scores[arbActual.id] || {}) : {}
   const arbComentario = arbActual ? (comentarios[arbActual.id] || '') : ''
-  const modalidadEval = activeEvento?.modalidad || 'kumite'
   const criteriosAdmin = CRITERIOS[modalidadEval] || CRITERIOS.kumite
   const todoCompleto = criteriosAdmin.every(c => (arbScores[c.key] || 0) > 0)
   const evaluadosCount = arbsDelEvento.filter(a => guardados[a.id]).length
@@ -289,7 +289,6 @@ export default function Admin() {
     { header: 'FEPAKA ID', key: 'fepaka_id', cell: r => <code>{r.fepaka_id}</code> },
     { header: 'Licencia', key: 'licencia', cell: r => <Badge variant="blue">{r.licencia}</Badge> },
   ]
-  const modalidadRes = activeEvento?.modalidad || 'kumite'
   const criteriosRes = CRITERIOS[modalidadRes] || CRITERIOS.kumite
   const colsRes = [
     { header: 'Árbitro', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
@@ -339,9 +338,6 @@ export default function Admin() {
               <Table
                 columns={[
                   { header: 'Evento', key: 'nombre', cell: r => <strong>{r.nombre}</strong> },
-                  { header: 'Modalidad', key: 'modalidad', cell: r => (
-                    <Badge variant={r.modalidad === 'kata' ? 'blue' : 'gold'}>{r.modalidad?.toUpperCase() || 'KUMITE'}</Badge>
-                  )},
                   { header: 'Fecha', key: 'fecha', cell: r => r.fecha ? new Date(r.fecha).toLocaleDateString('es-ES') : '—' },
                   { header: 'Estado', key: 'estado', cell: r => {
                     const v = r.estado === 'activo' ? 'green' : r.estado === 'finalizado' ? 'red' : r.estado === 'detenido' ? 'gold' : 'blue'
@@ -373,20 +369,15 @@ export default function Admin() {
               <form onSubmit={handleCrearEvento}>
                 <div className="row2">
                   <Field label="Nombre del evento" required><Input name="nombre" placeholder="Panamericano Panamá 2026" required /></Field>
-                  <Field label="Modalidad" required>
-                    <Select name="modalidad" defaultValue="kumite">
-                      <option value="kumite">Kumite</option>
-                      <option value="kata">Kata</option>
-                    </Select>
-                  </Field>
+                  <Field label="Sede"><Input name="sede" placeholder="Ciudad, País" /></Field>
                 </div>
                 <div className="row2">
                   <Field label="Fecha inicio"><Input name="fecha" type="date" /></Field>
                   <Field label="Fecha fin"><Input name="fecha_fin" type="date" /></Field>
                 </div>
                 <div className="row2">
-                  <Field label="Sede"><Input name="sede" placeholder="Ciudad, País" /></Field>
                   <Field label="Núm. evaluadores"><Input name="num_evaluadores" type="number" min="1" max="20" defaultValue="4" /></Field>
+                  <div></div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Button type="submit" variant="primary">Crear evento</Button>
@@ -453,12 +444,25 @@ export default function Admin() {
         {activeSub === 'evaluar' && activeEvento && (
           <div>
             <EventoBanner evento={activeEvento} />
+
+            {/* Selector libre de modalidad */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <Button variant={modalidadEval === 'kumite' ? 'primary' : 'secondary'}
+                onClick={() => { setModalidadEval('kumite'); setGuardados({}) }}>
+                🥋 Kumite
+              </Button>
+              <Button variant={modalidadEval === 'kata' ? 'primary' : 'secondary'}
+                onClick={() => { setModalidadEval('kata'); setGuardados({}) }}>
+                🥋 Kata
+              </Button>
+            </div>
+
             {arbsDelEvento.length === 0
               ? <Empty icon="🥋" title="Sin árbitros asignados" description="Asigna árbitros al evento primero." />
               : <>
                 <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
                   <ProgressBar value={evaluadosCount} max={arbsDelEvento.length || 1}
-                    label="Progreso" sublabel={`${evaluadosCount} / ${arbsDelEvento.length} evaluados`} />
+                    label={`Progreso — ${modalidadEval.toUpperCase()}`} sublabel={`${evaluadosCount} / ${arbsDelEvento.length} evaluados`} />
                 </div>
                 {arbActual && (
                   <>
@@ -518,19 +522,22 @@ export default function Admin() {
           <div>
             <EventoBanner evento={activeEvento} />
             <PageHeader title="RESULTADOS" />
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+              <Button variant={modalidadRes === 'kumite' ? 'primary' : 'secondary'} onClick={() => setModalidadRes('kumite')}>🥋 Kumite</Button>
+              <Button variant={modalidadRes === 'kata' ? 'primary' : 'secondary'} onClick={() => setModalidadRes('kata')}>🥋 Kata</Button>
+              <div style={{ width: 1, background: 'var(--border)', margin: '0 4px' }} />
               <Button variant={vistaRes === 'resumen' ? 'primary' : 'secondary'} onClick={() => setVistaRes('resumen')}>📊 Promedios generales</Button>
               <Button variant={vistaRes === 'detalle' ? 'primary' : 'secondary'} onClick={() => setVistaRes('detalle')}>👤 Por evaluador</Button>
             </div>
             {vistaRes === 'resumen' && (
-              <Card title="PROMEDIOS GENERALES">
-                <Table columns={colsRes} rows={resultados} keyExtractor={r => r.id}
+              <Card title={`PROMEDIOS GENERALES — ${modalidadRes.toUpperCase()}`}>
+                <Table columns={colsRes} rows={resultados.filter(r => true)} keyExtractor={r => r.id}
                   empty={<Empty icon="📊" title="Sin evaluaciones" description="No hay evaluaciones guardadas aún." />} />
               </Card>
             )}
             {vistaRes === 'detalle' && (
-              <Card title="POR EVALUADOR">
-                <Table columns={colsDet} rows={detalle} keyExtractor={r => r.id}
+              <Card title={`POR EVALUADOR — ${modalidadRes.toUpperCase()}`}>
+                <Table columns={colsDet} rows={detalle.filter(r => r.modalidad === modalidadRes)} keyExtractor={r => r.id}
                   empty={<Empty icon="👤" title="Sin evaluaciones individuales" />} />
               </Card>
             )}

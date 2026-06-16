@@ -2,7 +2,6 @@ const router = require('express').Router();
 const pool = require('../database');
 const { authMiddleware, adminOnly } = require('../middleware');
 
-// Crear tablas de relación si no existen
 pool.query(`
   CREATE TABLE IF NOT EXISTS evento_arbitros (
     evento_id INT REFERENCES eventos(id) ON DELETE CASCADE,
@@ -16,7 +15,6 @@ pool.query(`
   );
 `).catch(console.error);
 
-// Actualizar estados automáticos por fecha
 async function actualizarEstados() {
   await pool.query(`
     UPDATE eventos SET estado = CASE
@@ -30,7 +28,6 @@ async function actualizarEstados() {
   `).catch(() => {});
 }
 
-// GET todos los eventos
 router.get('/', authMiddleware, async (req, res) => {
   try {
     await actualizarEstados();
@@ -45,7 +42,6 @@ router.get('/', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET evento por id
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM eventos WHERE id=$1', [req.params.id]);
@@ -54,37 +50,33 @@ router.get('/:id', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST crear evento
+// POST crear evento — SIN modalidad fija, ambas modalidades disponibles siempre
 router.post('/', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const { nombre, fecha, fecha_fin, sede, modalidad, num_evaluadores } = req.body;
+    const { nombre, fecha, fecha_fin, sede, num_evaluadores } = req.body;
     const result = await pool.query(
-      `INSERT INTO eventos (nombre, fecha, fecha_fin, sede, modalidad, num_evaluadores)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [nombre, fecha||null, fecha_fin||null, sede||null,
-       modalidad||'kumite', num_evaluadores||4]
+      `INSERT INTO eventos (nombre, fecha, fecha_fin, sede, num_evaluadores)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [nombre, fecha||null, fecha_fin||null, sede||null, num_evaluadores||4]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT actualizar evento
 router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const { nombre, fecha, fecha_fin, sede, modalidad, num_evaluadores, estado, estado_manual } = req.body;
+    const { nombre, fecha, fecha_fin, sede, num_evaluadores, estado, estado_manual } = req.body;
     const result = await pool.query(
       `UPDATE eventos SET
-         nombre=$1, fecha=$2, fecha_fin=$3, sede=$4, modalidad=$5,
-         num_evaluadores=$6, estado=$7, estado_manual=$8
-       WHERE id=$9 RETURNING *`,
-      [nombre, fecha, fecha_fin, sede, modalidad,
-       num_evaluadores, estado, estado_manual ?? false, req.params.id]
+         nombre=$1, fecha=$2, fecha_fin=$3, sede=$4,
+         num_evaluadores=$5, estado=$6, estado_manual=$7
+       WHERE id=$8 RETURNING *`,
+      [nombre, fecha, fecha_fin, sede, num_evaluadores, estado, estado_manual ?? false, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT cambiar estado manualmente (admin)
 router.patch('/:id/estado', authMiddleware, adminOnly, async (req, res) => {
   try {
     const { estado } = req.body;
@@ -96,7 +88,6 @@ router.patch('/:id/estado', authMiddleware, adminOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── ÁRBITROS DEL EVENTO ──
 router.get('/:id/arbitros', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
@@ -135,7 +126,6 @@ router.delete('/:id/arbitros/:arbId', authMiddleware, adminOnly, async (req, res
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── EVALUADORES DEL EVENTO ──
 router.get('/:id/evaluadores', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
