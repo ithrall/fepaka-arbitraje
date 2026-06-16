@@ -10,13 +10,6 @@ import api from '../api'
 import { CRITERIOS, LICENCIAS, ESTADOS, nombreCompleto } from '../utils/criterios'
 
 
-
-// Helper: nombre completo del árbitro
-function nombreCompleto(arb) {
-  if (!arb) return ''
-  return arb.nombre_completo || (arb.apellido ? `${arb.nombre} ${arb.apellido}` : arb.nombre)
-}
-
 export default function Admin() {
   const { config, updateConfig } = useApp()
   const { toasts, toast } = useToast()
