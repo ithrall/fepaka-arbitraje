@@ -15,8 +15,9 @@ app.use('/api/evaluaciones',  require('./routes/evaluaciones'));
 app.use('/api/areas',         require('./routes/areas'));
 app.use('/api/config',        require('./routes/config'));
 app.use('/api/estadisticas',  require('./routes/estadisticas'));
+app.use('/api/auditoria',     require('./routes/auditoria'));
 
-app.get('/', (req, res) => res.json({ status: 'FEPAKA API v3 ✓' }));
+app.get('/', (req, res) => res.json({ status: 'FEPAKA API v4 ✓' }));
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Servidor corriendo en puerto ${PORT}`));

@@ -9,6 +9,7 @@ import { Card, StatCard, Table, ProgressBar, AssignItem, CriteriaCard, ScorePane
 import api from '../api'
 import { CRITERIOS, LICENCIAS, ESTADOS, nombreCompleto } from '../utils/criterios'
 import EstadisticasGlobales from '../components/EstadisticasGlobales'
+import PapeleraAuditoria from '../components/PapeleraAuditoria'
 
 export default function Admin() {
   const { config, updateConfig } = useApp()
@@ -65,6 +66,9 @@ export default function Admin() {
   const [busqArb, setBusqArb] = useState('')
   const [busqEval, setBusqEval] = useState('')
   const busqArbD = useDebounce(busqArb)
+  const [editArbModal, setEditArbModal] = useState(null) // árbitro siendo editado, o null
+  const [editEvalModal, setEditEvalModal] = useState(null) // evaluador siendo editado, o null
+  const [editEventoModal, setEditEventoModal] = useState(null) // evento siendo editado, o null
   const busqEvalD = useDebounce(busqEval)
 
   // ── Effects ──
@@ -182,6 +186,26 @@ export default function Admin() {
     } catch (err) { toast.error(err.response?.data?.error || 'Error al crear evento') }
   }
 
+  async function handleEditarEvento(e) {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    try {
+      await api.put(`/eventos/${editEventoModal.id}`, Object.fromEntries(fd))
+      setEditEventoModal(null); await refreshEvs()
+      toast.success('✓ Evento actualizado')
+    } catch (err) { toast.error(err.response?.data?.error || 'Error al actualizar') }
+  }
+
+  async function handleEliminarEvento(ev) {
+    if (!window.confirm(`¿Eliminar el evento "${ev.nombre}"? Podrás restaurarlo después desde la papelera.`)) return
+    try {
+      await api.delete(`/eventos/${ev.id}`)
+      await refreshEvs()
+      if (activeEvento?.id === ev.id) goHome()
+      toast.success(`Evento "${ev.nombre}" movido a la papelera`)
+    } catch (err) { toast.error(err.response?.data?.error || 'Error al eliminar') }
+  }
+
   // ── Handlers Árbitros ──
   async function handleCrearArbitro(e) {
     e.preventDefault()
@@ -207,6 +231,25 @@ export default function Admin() {
     e.target.value = ''
   }
 
+  async function handleEditarArbitro(e) {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    try {
+      await api.put(`/arbitros/${editArbModal.id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setEditArbModal(null); await refreshArbs()
+      toast.success('✓ Árbitro actualizado')
+    } catch (err) { toast.error(err.response?.data?.error || 'Error al actualizar') }
+  }
+
+  async function handleEliminarArbitro(arb) {
+    if (!window.confirm(`¿Eliminar a ${nombreCompleto(arb)}? Podrás restaurarlo después desde la papelera.`)) return
+    try {
+      await api.delete(`/arbitros/${arb.id}`)
+      await refreshArbs()
+      toast.success(`${nombreCompleto(arb)} movido a la papelera`)
+    } catch (err) { toast.error(err.response?.data?.error || 'Error al eliminar') }
+  }
+
   // ── Handlers Evaluadores ──
   async function handleCrearUsuario(e) {
     e.preventDefault()
@@ -230,6 +273,25 @@ export default function Admin() {
       await refreshUsers(); toast.success(`✓ ${data.insertados} evaluadores importados`)
     } catch { toast.error('Error al importar') }
     e.target.value = ''
+  }
+
+  async function handleEditarEvaluador(e) {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    try {
+      await api.put(`/usuarios/${editEvalModal.id}`, Object.fromEntries(fd))
+      setEditEvalModal(null); await refreshUsers()
+      toast.success('✓ Evaluador actualizado')
+    } catch (err) { toast.error(err.response?.data?.error || 'Error al actualizar') }
+  }
+
+  async function handleEliminarEvaluador(usr) {
+    if (!window.confirm(`¿Eliminar a ${usr.nombre}? Podrás restaurarlo después desde la papelera.`)) return
+    try {
+      await api.delete(`/usuarios/${usr.id}`)
+      await refreshUsers()
+      toast.success(`${usr.nombre} movido a la papelera`)
+    } catch (err) { toast.error(err.response?.data?.error || 'Error al eliminar') }
   }
 
   async function handleCambiarPassword(uid) {
@@ -356,6 +418,12 @@ export default function Admin() {
     { header: 'Reporte', key: '_rep', cell: r => (
       <Button size="xs" variant="secondary" onClick={() => window.open(`/reporte/${r.id}`, '_blank')}>📄 Ver reporte</Button>
     )},
+    { header: 'Acciones', key: '_acc2', cell: r => (
+      <div style={{ display: 'flex', gap: 4 }}>
+        <Button size="xs" variant="secondary" onClick={() => setEditArbModal(r)}>✏️ Editar</Button>
+        <Button size="xs" variant="danger" onClick={() => handleEliminarArbitro(r)}>🗑</Button>
+      </div>
+    )},
   ]
 
   const modalidadResCrits = CRITERIOS[modalidadRes] || CRITERIOS.kumite
@@ -433,6 +501,8 @@ export default function Admin() {
                   { header: 'Acción', key: '_acc', cell: r => (
                     <div style={{ display: 'flex', gap: 4 }}>
                       <Button size="xs" variant="secondary" onClick={() => handleSelectSub(r, 'arb')}>Gestionar</Button>
+                      <Button size="xs" variant="secondary" onClick={() => setEditEventoModal(r)}>✏️</Button>
+                      <Button size="xs" variant="danger" onClick={() => handleEliminarEvento(r)}>🗑</Button>
                     </div>
                   )},
                 ]}
@@ -781,7 +851,7 @@ export default function Admin() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr>
-                      {['Nombre','Usuario','Rol','Estado','Password'].map(h => (
+                      {['Nombre','Usuario','Rol','Estado','Password','Acciones'].map(h => (
                         <th key={h} style={{ background:'var(--dark)',color:'rgba(255,255,255,.6)',padding:'9px 14px',textAlign:'left',fontSize:10,letterSpacing:'1px',textTransform:'uppercase',fontWeight:500 }}>{h}</th>
                       ))}
                     </tr>
@@ -811,6 +881,12 @@ export default function Admin() {
                           ) : (
                             <Button size="xs" variant="secondary" onClick={()=>{setPwPanel(u.id);setPwNew('');setPwConf('');setPwErr('')}}>🔑 Cambiar password</Button>
                           )}
+                        </td>
+                        <td style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)' }}>
+                          <div style={{ display:'flex',gap:4 }}>
+                            <Button size="xs" variant="secondary" onClick={() => setEditEvalModal(u)}>✏️ Editar</Button>
+                            <Button size="xs" variant="danger" onClick={() => handleEliminarEvaluador(u)}>🗑</Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -843,6 +919,106 @@ export default function Admin() {
                 <Button type="submit" variant="primary">Guardar configuración</Button>
               </form>
             </Card>
+            <PapeleraAuditoria />
+          </div>
+        )}
+
+        {/* ── MODAL EDITAR ÁRBITRO ── */}
+        {editArbModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, margin: 0 }}>EDITAR ÁRBITRO</h2>
+                <button onClick={() => setEditArbModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--gray)' }}>✕</button>
+              </div>
+              <form onSubmit={handleEditarArbitro}>
+                <div className="row2">
+                  <Field label="Nombre" required><Input name="nombre" defaultValue={editArbModal.nombre} required /></Field>
+                  <Field label="Apellido"><Input name="apellido" defaultValue={editArbModal.apellido} /></Field>
+                </div>
+                <div className="row2">
+                  <Field label="Provincia"><Input name="provincia" defaultValue={editArbModal.provincia} /></Field>
+                  <Field label="Club"><Input name="club" defaultValue={editArbModal.club} /></Field>
+                </div>
+                <div className="row2">
+                  <Field label="FEPAKA ID"><Input name="fepaka_id" defaultValue={editArbModal.fepaka_id} /></Field>
+                  <Field label="Licencia">
+                    <Select name="licencia" defaultValue={editArbModal.licencia}>
+                      {LICENCIAS.map(l => <option key={l}>{l}</option>)}
+                    </Select>
+                  </Field>
+                </div>
+                <Field label="Foto (deja vacío para no cambiar)"><Input name="foto" type="file" accept="image/*" /></Field>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <Button type="submit" variant="primary">Guardar cambios</Button>
+                  <Button type="button" variant="secondary" onClick={() => setEditArbModal(null)}>Cancelar</Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ── MODAL EDITAR EVALUADOR ── */}
+        {editEvalModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 24, maxWidth: 420, width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, margin: 0 }}>EDITAR EVALUADOR</h2>
+                <button onClick={() => setEditEvalModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--gray)' }}>✕</button>
+              </div>
+              <form onSubmit={handleEditarEvaluador}>
+                <Field label="Nombre completo" required><Input name="nombre" defaultValue={editEvalModal.nombre} required /></Field>
+                <Field label="Usuario" required><Input name="username" defaultValue={editEvalModal.username} required /></Field>
+                <Field label="Rol">
+                  <Select name="rol" defaultValue={editEvalModal.rol}>
+                    <option value="evaluador">Evaluador</option>
+                    <option value="admin">Administrador</option>
+                  </Select>
+                </Field>
+                <p style={{ fontSize: 11, color: 'var(--gray2)', marginBottom: 12 }}>
+                  Para cambiar el password usa el botón 🔑 en la tabla de evaluadores.
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button type="submit" variant="primary">Guardar cambios</Button>
+                  <Button type="button" variant="secondary" onClick={() => setEditEvalModal(null)}>Cancelar</Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ── MODAL EDITAR EVENTO ── */}
+        {editEventoModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, margin: 0 }}>EDITAR EVENTO</h2>
+                <button onClick={() => setEditEventoModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--gray)' }}>✕</button>
+              </div>
+              <form onSubmit={handleEditarEvento}>
+                <Field label="Nombre del evento" required><Input name="nombre" defaultValue={editEventoModal.nombre} required /></Field>
+                <div className="row2">
+                  <Field label="Fecha inicio"><Input name="fecha" type="date" defaultValue={editEventoModal.fecha?.split('T')[0]} /></Field>
+                  <Field label="Fecha fin"><Input name="fecha_fin" type="date" defaultValue={editEventoModal.fecha_fin?.split('T')[0]} /></Field>
+                </div>
+                <div className="row2">
+                  <Field label="Sede"><Input name="sede" defaultValue={editEventoModal.sede} /></Field>
+                  <Field label="Núm. evaluadores"><Input name="num_evaluadores" type="number" min="1" max="20" defaultValue={editEventoModal.num_evaluadores} /></Field>
+                </div>
+                <Field label="Estado">
+                  <Select name="estado" defaultValue={editEventoModal.estado}>
+                    <option value="activo">Activo</option>
+                    <option value="detenido">Detenido</option>
+                    <option value="finalizado">Finalizado</option>
+                  </Select>
+                </Field>
+                <input type="hidden" name="estado_manual" value="true" />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button type="submit" variant="primary">Guardar cambios</Button>
+                  <Button type="button" variant="secondary" onClick={() => setEditEventoModal(null)}>Cancelar</Button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </AppShell>

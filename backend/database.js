@@ -14,6 +14,7 @@ async function initDB() {
       password_hash VARCHAR(200) NOT NULL,
       rol VARCHAR(20) DEFAULT 'evaluador',
       activo BOOLEAN DEFAULT true,
+      eliminado BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT NOW()
     );
 
@@ -26,6 +27,7 @@ async function initDB() {
       estado VARCHAR(20) DEFAULT 'activo',
       estado_manual BOOLEAN DEFAULT false,
       num_evaluadores INT DEFAULT 4,
+      eliminado BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT NOW()
     );
 
@@ -39,6 +41,7 @@ async function initDB() {
       fepaka_id VARCHAR(30) UNIQUE,
       licencia VARCHAR(50),
       foto_url VARCHAR(255),
+      eliminado BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT NOW()
     );
 
@@ -86,14 +89,28 @@ async function initDB() {
       comentario TEXT,
       created_at TIMESTAMP DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS auditoria (
+      id SERIAL PRIMARY KEY,
+      usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      usuario_nombre VARCHAR(100),
+      accion VARCHAR(20) NOT NULL,
+      entidad VARCHAR(20) NOT NULL,
+      entidad_id INT NOT NULL,
+      entidad_nombre VARCHAR(150),
+      detalle JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
   `);
 
-  // Migraciones — agregar columnas que puedan faltar
   const migraciones = [
     `ALTER TABLE eventos ADD COLUMN IF NOT EXISTS fecha_fin DATE`,
     `ALTER TABLE eventos ADD COLUMN IF NOT EXISTS estado_manual BOOLEAN DEFAULT false`,
+    `ALTER TABLE eventos ADD COLUMN IF NOT EXISTS eliminado BOOLEAN DEFAULT false`,
     `ALTER TABLE eventos DROP COLUMN IF EXISTS modalidad`,
     `ALTER TABLE arbitros ADD COLUMN IF NOT EXISTS apellido VARCHAR(80)`,
+    `ALTER TABLE arbitros ADD COLUMN IF NOT EXISTS eliminado BOOLEAN DEFAULT false`,
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS eliminado BOOLEAN DEFAULT false`,
     `ALTER TABLE evaluaciones ADD COLUMN IF NOT EXISTS modalidad VARCHAR(10) NOT NULL DEFAULT 'kumite'`,
     `ALTER TABLE evaluaciones ADD COLUMN IF NOT EXISTS area_id INT`,
     `ALTER TABLE evaluaciones ADD COLUMN IF NOT EXISTS voz_mando DECIMAL(3,1)`,
@@ -116,37 +133,35 @@ async function initDB() {
       arbitro_id INT REFERENCES arbitros(id) ON DELETE CASCADE,
       PRIMARY KEY (area_id, arbitro_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS auditoria (
+      id SERIAL PRIMARY KEY,
+      usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      usuario_nombre VARCHAR(100),
+      accion VARCHAR(20) NOT NULL,
+      entidad VARCHAR(20) NOT NULL,
+      entidad_id INT NOT NULL,
+      entidad_nombre VARCHAR(150),
+      detalle JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`,
   ];
 
   for (const sql of migraciones) {
     await pool.query(sql).catch(err => console.log('Migración omitida:', err.message));
   }
 
-  // CRÍTICO: agregar la restricción UNIQUE que falta para el ON CONFLICT
-  // Primero eliminar duplicados si existen (mantener el más reciente)
   await pool.query(`
     DELETE FROM evaluaciones a USING evaluaciones b
-    WHERE a.id < b.id
-      AND a.evento_id = b.evento_id
-      AND a.arbitro_id = b.arbitro_id
-      AND a.usuario_id = b.usuario_id
-      AND a.modalidad = b.modalidad
+    WHERE a.id < b.id AND a.evento_id = b.evento_id AND a.arbitro_id = b.arbitro_id
+      AND a.usuario_id = b.usuario_id AND a.modalidad = b.modalidad
   `).catch(() => {});
 
-  // Eliminar constraint vieja si existe con otro nombre, luego crear la correcta
+  await pool.query(`ALTER TABLE evaluaciones DROP CONSTRAINT IF EXISTS evaluaciones_evento_id_arbitro_id_usuario_id_key`).catch(() => {});
   await pool.query(`
-    ALTER TABLE evaluaciones DROP CONSTRAINT IF EXISTS evaluaciones_evento_id_arbitro_id_usuario_id_key
-  `).catch(() => {});
-
-  await pool.query(`
-    ALTER TABLE evaluaciones
-    ADD CONSTRAINT evaluaciones_unica
+    ALTER TABLE evaluaciones ADD CONSTRAINT evaluaciones_unica
     UNIQUE (evento_id, arbitro_id, usuario_id, modalidad)
-  `).catch(err => {
-    if (!err.message.includes('already exists')) console.log('Constraint:', err.message)
-  });
+  `).catch(err => { if (!err.message.includes('already exists')) console.log('Constraint:', err.message) });
 
-  // Estados automáticos
   await pool.query(`
     UPDATE eventos SET estado = CASE
       WHEN estado_manual = true THEN estado
@@ -170,8 +185,7 @@ async function initDB() {
 
   await pool.query(`
     INSERT INTO evento_arbitros (evento_id, arbitro_id)
-    SELECT evento_id, id FROM arbitros
-    WHERE evento_id IS NOT NULL
+    SELECT evento_id, id FROM arbitros WHERE evento_id IS NOT NULL
     ON CONFLICT DO NOTHING
   `).catch(() => {});
 
