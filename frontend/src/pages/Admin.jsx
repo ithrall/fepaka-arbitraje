@@ -5,18 +5,10 @@ import { useAsync, useToast, useDebounce } from '../hooks/useAsync'
 import { AppShell, EventoBanner, PageHeader, CsvDropZone, EscudoUpload } from '../components/layout'
 import { Button, Badge, Empty, ErrorState, ToastContainer, ScorePill } from '../components/ui'
 import { Field, Input, Select } from '../components/forms'
-import { Card, StatCard, Table, ProgressBar, AssignItem, CriteriaCard, ScorePanel, EventoBanner as EvBanner } from '../components/data'
+import { Card, StatCard, Table, ProgressBar, AssignItem, CriteriaCard, ScorePanel } from '../components/data'
 import api from '../api'
-import { CRITERIOS, ESTADOS, nombreCompleto } from '../utils/criterios'
+import { CRITERIOS, LICENCIAS, ESTADOS, nombreCompleto } from '../utils/criterios'
 
-const LICENCIAS = ['Nacional A','Nacional B','Nacional C','Provincial A','Provincial B','Provincial C']
-const CRITERIOS = [
-  { key: 'conformidad',           label: 'Conformidad',               short: 'Conform.' },
-  { key: 'manejo_tatami',         label: 'Manejo del tatami',         short: 'Tatami'   },
-  { key: 'instrucciones',         label: 'Instrucciones claras',      short: 'Instruc.' },
-  { key: 'aplicacion_reglamento', label: 'Aplicación del reglamento', short: 'Reglam.'  },
-  { key: 'presencia',             label: 'Presencia',                 short: 'Presencia'},
-]
 
 
 // Helper: nombre completo del árbitro
@@ -104,7 +96,8 @@ export default function Admin() {
       .then(r => {
         if (!r.data) return
         const s = {}
-        CRITERIOS.forEach(c => { s[c.key] = r.data[c.key] ? parseFloat(r.data[c.key]) : 0 })
+        const crits = CRITERIOS[activeEvento?.modalidad || 'kumite'] || CRITERIOS.kumite
+        crits.forEach(c => { s[c.key] = r.data[c.key] ? parseFloat(r.data[c.key]) : 0 })
         setScores(prev => ({ ...prev, [arb.id]: s }))
         setComentarios(prev => ({ ...prev, [arb.id]: r.data.comentario || '' }))
         setGuardados(prev => ({ ...prev, [arb.id]: true }))
@@ -155,7 +148,7 @@ export default function Admin() {
         api.get(`/evaluaciones/resumen/evento/${evId}`),
         api.get(`/evaluaciones/detalle/evento/${evId}`),
       ])
-      setResultados(rr.data); setDetalle(rd.data)
+      setResultados(rr.data.rows || rr.data); setDetalle(rd.data.rows || rd.data)
     } catch { toast.error('Error al cargar resultados') }
   }
 
@@ -257,7 +250,9 @@ export default function Admin() {
   const arbActual = arbsDelEvento[arbIdx]
   const arbScores = arbActual ? (scores[arbActual.id] || {}) : {}
   const arbComentario = arbActual ? (comentarios[arbActual.id] || '') : ''
-  const todoCompleto = CRITERIOS.every(c => (arbScores[c.key] || 0) > 0)
+  const modalidadEval = activeEvento?.modalidad || 'kumite'
+  const criteriosAdmin = CRITERIOS[modalidadEval] || CRITERIOS.kumite
+  const todoCompleto = criteriosAdmin.every(c => (arbScores[c.key] || 0) > 0)
   const evaluadosCount = arbsDelEvento.filter(a => guardados[a.id]).length
 
   function handleScore(criterio, valor) {
@@ -271,6 +266,7 @@ export default function Admin() {
     try {
       await api.post('/evaluaciones', {
         evento_id: activeEvento.id, arbitro_id: arbActual.id,
+        modalidad: modalidadEval, area_id: arbActual.area_id || null,
         ...arbScores, comentario: arbComentario || null,
       })
       setGuardados(prev => ({ ...prev, [arbActual.id]: true }))
@@ -314,11 +310,7 @@ export default function Admin() {
   const colsDet = [
     { header: 'Árbitro', key: 'arbitro_nombre', cell: r => <><strong>{r.arbitro_nombre}</strong><br/><span style={{ fontSize: 11, color: 'var(--gray2)' }}>{r.licencia}</span></> },
     { header: 'Evaluador', key: 'evaluador_nombre' },
-    { header: 'Conform.', key: 'conformidad' },
-    { header: 'Tatami', key: 'manejo_tatami' },
-    { header: 'Instruc.', key: 'instrucciones' },
-    { header: 'Reglam.', key: 'aplicacion_reglamento' },
-    { header: 'Presencia', key: 'presencia' },
+    ...criteriosRes.map(c => ({ header: c.short, key: c.key, cell: r => r[c.key] ? parseFloat(r[c.key]).toFixed(1) : '—' })),
     { header: 'Prom.', key: 'promedio_evaluador', cell: r => <ScorePill value={r.promedio_evaluador} /> },
     { header: 'Comentario', key: 'comentario', cell: r => (
       <span style={{ fontSize: 12, color: 'var(--gray)', fontStyle: r.comentario ? 'normal' : 'italic', maxWidth: 180, display: 'block' }}>
@@ -503,8 +495,8 @@ export default function Admin() {
                       <button onClick={() => setArbIdx(i => Math.min(arbsDelEvento.length - 1, i + 1))} disabled={arbIdx === arbsDelEvento.length - 1}
                         style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'white', cursor: arbIdx === arbsDelEvento.length - 1 ? 'not-allowed' : 'pointer', opacity: arbIdx === arbsDelEvento.length - 1 ? 0.3 : 1, fontSize: 16 }}>→</button>
                     </div>
-                    <ScorePanel scores={arbScores} criterios={CRITERIOS} />
-                    {CRITERIOS.map(c => (
+                    <ScorePanel scores={arbScores} criterios={criteriosAdmin} />
+                    {criteriosAdmin.map(c => (
                       <CriteriaCard key={c.key} label={c.label}
                         value={arbScores[c.key] || 0} onChange={val => handleScore(c.key, val)} disabled={saving} />
                     ))}
