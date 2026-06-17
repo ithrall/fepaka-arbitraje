@@ -3,27 +3,42 @@ import api from '../api'
 
 const AppContext = createContext(null)
 
-const STORAGE_KEYS = {
-  escudo: 'fepaka_escudo',
-  fedNombre: 'fepaka_nombre',
-  tituloApp: 'fepaka_titulo_app',
-}
-
 export function AppProvider({ children }) {
   const [user, setUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('fepaka_user')) } catch { return null }
   })
 
-  // FIX: config se inicializa leyendo localStorage de forma segura,
-  // y cada cambio se persiste inmediatamente — antes solo vivía en memoria
-  // y se perdía al recargar la página o tras un nuevo deploy.
-  const [config, setConfig] = useState(() => ({
-    escudo: localStorage.getItem(STORAGE_KEYS.escudo) || null,
-    fedNombre: localStorage.getItem(STORAGE_KEYS.fedNombre) || 'FEPAKA',
-    tituloApp: localStorage.getItem(STORAGE_KEYS.tituloApp) || 'Gestión de Arbitraje',
-  }))
+  // FIX: la configuración (logo, nombre, título) ahora vive en el servidor
+  // (PostgreSQL) en lugar de localStorage, así es la misma en cualquier
+  // dispositivo o navegador que entre a la aplicación.
+  const [config, setConfig] = useState({
+    escudo: null,
+    fedNombre: 'FEPAKA',
+    tituloApp: 'Gestión de Arbitraje',
+  })
+  const [configLoaded, setConfigLoaded] = useState(false)
 
   const [eventoActivo, setEventoActivo] = useState(null)
+
+  // Cargar configuración del servidor al iniciar la app (es pública, no requiere login)
+  useEffect(() => {
+    cargarConfig()
+  }, [])
+
+  async function cargarConfig() {
+    try {
+      const { data } = await api.get('/config')
+      setConfig({
+        escudo: data.escudo || null,
+        fedNombre: data.fedNombre || 'FEPAKA',
+        tituloApp: data.tituloApp || 'Gestión de Arbitraje',
+      })
+    } catch (err) {
+      console.error('No se pudo cargar la configuración del servidor:', err.message)
+    } finally {
+      setConfigLoaded(true)
+    }
+  }
 
   const login = useCallback(async (username, password) => {
     const { data } = await api.post('/auth/login', { username, password })
@@ -40,25 +55,25 @@ export function AppProvider({ children }) {
     setEventoActivo(null)
   }, [])
 
-  // FIX: updateConfig ahora persiste CADA campo individualmente en localStorage
-  // de forma inmediata y confiable, sin depender de que React vuelva a renderizar.
-  const updateConfig = useCallback((updates) => {
-    setConfig(prev => {
-      const next = { ...prev, ...updates }
-
-      if ('escudo' in updates) {
-        if (updates.escudo) localStorage.setItem(STORAGE_KEYS.escudo, updates.escudo)
-        else localStorage.removeItem(STORAGE_KEYS.escudo)
-      }
-      if ('fedNombre' in updates && updates.fedNombre) {
-        localStorage.setItem(STORAGE_KEYS.fedNombre, updates.fedNombre)
-      }
-      if ('tituloApp' in updates && updates.tituloApp) {
-        localStorage.setItem(STORAGE_KEYS.tituloApp, updates.tituloApp)
-      }
-
-      return next
-    })
+  // FIX: updateConfig ahora guarda en el servidor mediante PUT /api/config,
+  // y solo actualiza el estado local tras confirmar éxito en el backend.
+  const updateConfig = useCallback(async (updates) => {
+    // Actualización optimista en pantalla
+    setConfig(prev => ({ ...prev, ...updates }))
+    try {
+      const { data } = await api.put('/config', updates)
+      setConfig({
+        escudo: data.escudo || null,
+        fedNombre: data.fedNombre || 'FEPAKA',
+        tituloApp: data.tituloApp || 'Gestión de Arbitraje',
+      })
+      return data
+    } catch (err) {
+      console.error('Error al guardar configuración en el servidor:', err.message)
+      // Revertir recargando desde el servidor si falló
+      cargarConfig()
+      throw err
+    }
   }, [])
 
   const isAdmin = user?.rol === 'admin'
@@ -66,7 +81,7 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       user, login, logout, isAdmin,
-      config, updateConfig,
+      config, configLoaded, updateConfig,
       eventoActivo, setEventoActivo,
     }}>
       {children}

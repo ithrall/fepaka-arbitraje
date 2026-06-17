@@ -922,12 +922,12 @@ export default function Admin() {
                 <Card title="LOGO" subtitle="El logo aparece en el login y en el encabezado de todas las páginas">
                   <EscudoUpload
                     escudo={config.escudo}
-                    onChange={data => { updateConfig({ escudo: data }); toast.success('✓ Logo actualizado') }}
-                    onRemove={() => { updateConfig({ escudo: null }); toast.success('Logo eliminado') }}
+                    onChange={data => { updateConfig({ escudo: data }).then(() => toast.success('✓ Logo actualizado')).catch(() => toast.error('Error al guardar el logo')) }}
+                    onRemove={() => { updateConfig({ escudo: null }).then(() => toast.success('Logo eliminado')).catch(() => toast.error('Error al eliminar el logo')) }}
                   />
                 </Card>
                 <Card title="NOMBRE DEL CLUB / FEDERACIÓN">
-                  <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ fedNombre: fd.get('fed_nombre') || 'FEPAKA' }); toast.success('✓ Configuración guardada') }}>
+                  <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ fedNombre: fd.get('fed_nombre') || 'FEPAKA' }).then(() => toast.success('✓ Configuración guardada')).catch(() => toast.error('Error al guardar')) }}>
                     <Field label="Nombre en el encabezado">
                       <Input name="fed_nombre" defaultValue={config.fedNombre} style={{ fontSize:15,fontWeight:500 }} />
                     </Field>
@@ -935,7 +935,7 @@ export default function Admin() {
                   </form>
                 </Card>
                 <Card title="TÍTULO DE LA APLICACIÓN" subtitle="Texto que aparece debajo del nombre, por ejemplo 'Gestión de Arbitraje'">
-                  <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ tituloApp: fd.get('titulo_app') || 'Gestión de Arbitraje' }); toast.success('✓ Título actualizado') }}>
+                  <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ tituloApp: fd.get('titulo_app') || 'Gestión de Arbitraje' }).then(() => toast.success('✓ Título actualizado')).catch(() => toast.error('Error al guardar')) }}>
                     <Field label="Subtítulo / descripción de la app">
                       <Input name="titulo_app" defaultValue={config.tituloApp} style={{ fontSize:14 }} />
                     </Field>
