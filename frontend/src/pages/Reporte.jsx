@@ -2,18 +2,19 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { Spinner } from '../components/ui'
-import { CRITERIOS, ESTADOS, nombreCompleto } from '../utils/criterios'
+import { CRITERIOS, nombreCompleto } from '../utils/criterios'
 import api from '../api'
 
 export default function Reporte() {
   const { arbitroId } = useParams()
   const { config } = useApp()
   const nav = useNavigate()
-  const printRef = useRef()
 
   const [arbitro, setArbitro] = useState(null)
   const [historial, setHistorial] = useState([])
   const [loading, setLoading] = useState(true)
+
+  const year = new Date().getFullYear()
 
   useEffect(() => {
     cargarDatos()
@@ -42,7 +43,6 @@ export default function Reporte() {
     </div>
   )
 
-  // Agrupar por evento
   const porEvento = historial.reduce((acc, e) => {
     if (!acc[e.evento_id]) {
       acc[e.evento_id] = {
@@ -58,11 +58,11 @@ export default function Reporte() {
 
   return (
     <>
-      {/* Botones solo en pantalla */}
+      {/* Barra de acción — solo en pantalla */}
       <div className="no-print" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
         background: 'var(--dark)', padding: '10px 16px',
-        display: 'flex', alignItems: 'center', gap: 12,
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>
         <button onClick={() => nav(-1)} style={{
           padding: '6px 14px', background: 'rgba(255,255,255,0.1)',
@@ -74,28 +74,34 @@ export default function Reporte() {
           borderRadius: 20, color: 'white', fontSize: 12, fontWeight: 600,
           cursor: 'pointer', fontFamily: 'var(--font)',
         }}>🖨 Imprimir / PDF</button>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
           Para guardar como PDF: Imprimir → Destino: "Guardar como PDF"
         </span>
       </div>
 
       {/* Contenido imprimible */}
-      <div ref={printRef} style={{
-        maxWidth: 750, margin: '0 auto', padding: '80px 40px 40px',
+      <div style={{
+        maxWidth: 750, margin: '0 auto', padding: '70px 32px 40px',
         fontFamily: 'DM Sans, sans-serif', fontSize: 13, color: '#0F172A',
       }}>
         <style>{`
           @media print {
             .no-print { display: none !important; }
             body { margin: 0; }
-            @page { size: letter; margin: 20mm; }
+            @page { size: letter; margin: 18mm 16mm 22mm 16mm; }
+            .reporte-footer-print { display: block; }
+          }
+          @media screen {
+            .reporte-footer-print { display: none; }
           }
         `}</style>
 
-        {/* Encabezado */}
+        {/* Encabezado con escudo de la organización */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '2px solid #C8102E', paddingBottom: 16, marginBottom: 20 }}>
-          {config.escudo && (
-            <img src={config.escudo} alt="Escudo" style={{ width: 60, height: 60, objectFit: 'contain' }} />
+          {config.escudo ? (
+            <img src={config.escudo} alt="Escudo" style={{ width: 60, height: 60, objectFit: 'contain', flexShrink: 0 }} />
+          ) : (
+            <div style={{ width: 60, height: 60, borderRadius: 10, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>🥋</div>
           )}
           <div>
             <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 22, letterSpacing: 2, color: '#C8102E' }}>
@@ -123,7 +129,6 @@ export default function Reporte() {
           </div>
         )}
 
-        {/* Sin historial */}
         {Object.keys(porEvento).length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>
             Sin evaluaciones registradas
@@ -135,7 +140,6 @@ export default function Reporte() {
           const crits = CRITERIOS[ev.modalidad] || CRITERIOS.kumite
           return (
             <div key={evId} style={{ marginBottom: 28, pageBreakInside: 'avoid' }}>
-              {/* Header evento */}
               <div style={{ background: '#1E293B', color: 'white', borderRadius: '8px 8px 0 0', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 15, letterSpacing: 1 }}>
@@ -154,7 +158,6 @@ export default function Reporte() {
                 </span>
               </div>
 
-              {/* Tabla de evaluaciones */}
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#F1F5F9' }}>
@@ -203,20 +206,11 @@ export default function Reporte() {
                   })}
                 </tbody>
 
-                {/* Fila de promedios del evento */}
                 {ev.evaluaciones.length > 1 && (() => {
                   const promsEvento = crits.map(c => {
                     const vals = ev.evaluaciones.map(e => parseFloat(e[c.key])).filter(v => !isNaN(v) && v > 0)
                     return vals.length ? (vals.reduce((a,b) => a+b, 0) / vals.length).toFixed(1) : '—'
                   })
-                  const todos = ev.evaluaciones.flatMap(e =>
-                    crits.map(c => parseFloat(e[c.key])).filter(v => !isNaN(v) && v > 0)
-                  )
-                  const totalEvento = todos.length
-                    ? (todos.reduce((a,b) => a+b, 0) / todos.length * crits.length / crits.length).toFixed(2)
-                    : '—'
-
-                  // promedio real por criterio y luego promedio de criterios
                   const promsCrit = crits.map(c => {
                     const vals = ev.evaluaciones.map(e => parseFloat(e[c.key])).filter(v => !isNaN(v) && v > 0)
                     return vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : null
@@ -248,11 +242,25 @@ export default function Reporte() {
           )
         })}
 
-        {/* Pie de página */}
-        <div style={{ marginTop: 32, borderTop: '1px solid #E2E8F0', paddingTop: 12, fontSize: 10, color: '#94A3B8', display: 'flex', justifyContent: 'space-between' }}>
-          <span>{config.fedNombre || 'FEPAKA'} — Gestión de Arbitraje</span>
+        {/* Pie de página — visible en pantalla, al final del contenido */}
+        <div className="no-print" style={{ marginTop: 32, borderTop: '1px solid #E2E8F0', paddingTop: 12, fontSize: 10, color: '#94A3B8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+          <span>
+            © {year} S2TechGroup · Todos los derechos reservados ·{' '}
+            <a href="https://s2techgroup.net" target="_blank" rel="noopener noreferrer" style={{ color: '#94A3B8' }}>s2techgroup.net</a>
+            {' '}· v1.0.0
+          </span>
           <span>Generado: {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
         </div>
+      </div>
+
+      {/* Pie de página fijo — se repite en CADA hoja impresa */}
+      <div className="reporte-footer-print" style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        textAlign: 'center', fontSize: 9, color: '#94A3B8',
+        padding: '6px 16px', borderTop: '1px solid #E2E8F0',
+      }}>
+        {config.fedNombre || 'FEPAKA'} — Reporte de {arbitro ? nombreCompleto(arbitro) : ''} ·
+        © {year} S2TechGroup · s2techgroup.net · v1.0.0
       </div>
     </>
   )
