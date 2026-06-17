@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { Spinner } from '../components/ui'
@@ -13,10 +13,25 @@ export default function Reporte() {
   const [arbitro, setArbitro] = useState(null)
   const [historial, setHistorial] = useState([])
   const [loading, setLoading] = useState(true)
+  const [incluirGraficos, setIncluirGraficos] = useState(false)
+
+  const chartEventoRef = useRef(null)
+  const chartCriterioRef = useRef(null)
+  const chartsRendered = useRef({ evento: null, criterio: null })
 
   const year = new Date().getFullYear()
 
   useEffect(() => { cargarDatos() }, [arbitroId])
+
+  useEffect(() => {
+    if (incluirGraficos && historial.length > 0) {
+      // Esperar al siguiente frame para que los canvas existan en el DOM
+      setTimeout(dibujarGraficos, 50)
+    } else {
+      chartsRendered.current.evento?.destroy()
+      chartsRendered.current.criterio?.destroy()
+    }
+  }, [incluirGraficos, historial])
 
   async function cargarDatos() {
     try {
@@ -33,33 +48,87 @@ export default function Reporte() {
 
   function handlePrint() { window.print() }
 
+  const porEvento = historial.reduce((acc, e) => {
+    if (!acc[e.evento_id]) acc[e.evento_id] = { evento_nombre: e.evento_nombre, fecha: e.fecha, modalidad: e.modalidad, evaluaciones: [] }
+    acc[e.evento_id].evaluaciones.push(e)
+    return acc
+  }, {})
+
+  // Usamos la modalidad predominante del historial para el gráfico resumen
+  const modalidadPredominante = historial[0]?.modalidad || 'kumite'
+  const critsResumen = CRITERIOS[modalidadPredominante] || CRITERIOS.kumite
+
+  function calcularResumenPorEvento() {
+    return Object.values(porEvento)
+      .filter(ev => ev.modalidad === modalidadPredominante)
+      .map(ev => {
+        const crits = CRITERIOS[ev.modalidad] || CRITERIOS.kumite
+        const todos = ev.evaluaciones.flatMap(e => crits.map(c => parseFloat(e[c.key])).filter(v => !isNaN(v) && v > 0))
+        const prom = todos.length ? (todos.reduce((a,b)=>a+b,0)/todos.length) : null
+        return { nombre: ev.evento_nombre, promedio: prom }
+      })
+  }
+
+  function calcularResumenPorCriterio() {
+    const eventosFiltrados = Object.values(porEvento).filter(ev => ev.modalidad === modalidadPredominante)
+    return critsResumen.map(c => {
+      const vals = eventosFiltrados.flatMap(ev => ev.evaluaciones.map(e => parseFloat(e[c.key])).filter(v => !isNaN(v) && v > 0))
+      return { criterio: c.short, promedio: vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null }
+    })
+  }
+
+  function dibujarGraficos() {
+    if (!window.Chart) return
+    chartsRendered.current.evento?.destroy()
+    chartsRendered.current.criterio?.destroy()
+
+    const datosEvento = calcularResumenPorEvento()
+    if (chartEventoRef.current && datosEvento.length) {
+      chartsRendered.current.evento = new window.Chart(chartEventoRef.current, {
+        type: 'bar',
+        data: {
+          labels: datosEvento.map(d => d.nombre),
+          datasets: [{
+            data: datosEvento.map(d => d.promedio),
+            backgroundColor: datosEvento.map(d => d.promedio >= 4 ? '#1D9E75' : d.promedio >= 3 ? '#EF9F27' : '#E24B4A'),
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: false, animation: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { min: 0, max: 5, ticks: { stepSize: 1, font: { size: 10 } } }, x: { ticks: { font: { size: 9 } } } },
+        }
+      })
+    }
+
+    const datosCriterio = calcularResumenPorCriterio()
+    if (chartCriterioRef.current && datosCriterio.length) {
+      chartsRendered.current.criterio = new window.Chart(chartCriterioRef.current, {
+        type: 'radar',
+        data: {
+          labels: datosCriterio.map(d => d.criterio),
+          datasets: [{
+            label: 'Promedio', data: datosCriterio.map(d => d.promedio),
+            backgroundColor: 'rgba(200,16,46,0.15)', borderColor: '#C8102E', pointBackgroundColor: '#C8102E',
+          }]
+        },
+        options: {
+          responsive: false, animation: false,
+          plugins: { legend: { display: false } },
+          scales: { r: { min: 0, max: 5, ticks: { stepSize: 1, font: { size: 9 } }, pointLabels: { font: { size: 10 } } } },
+        }
+      })
+    }
+  }
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
       <Spinner size={36} />
     </div>
   )
 
-  const porEvento = historial.reduce((acc, e) => {
-    if (!acc[e.evento_id]) {
-      acc[e.evento_id] = { evento_nombre: e.evento_nombre, fecha: e.fecha, modalidad: e.modalidad, evaluaciones: [] }
-    }
-    acc[e.evento_id].evaluaciones.push(e)
-    return acc
-  }, {})
-
   const footerText = `${config.fedNombre || 'FEPAKA'} — Reporte de ${arbitro ? nombreCompleto(arbitro) : ''} · © ${year} S2TechGroup · s2techgroup.net · v1.0.0`
-
-  // Bloque del footer reutilizado: lo insertamos repetido dentro de cada
-  // sección de evento Y al final, así garantizamos que aparezca en cada
-  // hoja sin depender del header/footer del navegador (que no es controlable).
-  const FooterBloque = ({ mostrarSiempre }) => (
-    <div className={mostrarSiempre ? '' : 'reporte-footer-repeat'} style={{
-      borderTop: '1px solid #E2E8F0', marginTop: 16, paddingTop: 8,
-      fontSize: 9, color: '#94A3B8', textAlign: 'center',
-    }}>
-      {footerText}
-    </div>
-  )
 
   return (
     <>
@@ -68,7 +137,8 @@ export default function Reporte() {
           .no-print { display: none !important; }
           html, body { margin: 0; }
           @page { size: letter; margin: 16mm 16mm 16mm 16mm; }
-          .evento-bloque { page-break-inside: avoid; page-break-after: auto; }
+          .evento-bloque { page-break-inside: avoid; }
+          .graficos-bloque { page-break-inside: avoid; }
         }
       `}</style>
 
@@ -79,26 +149,28 @@ export default function Reporte() {
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>
         <button onClick={() => nav(-1)} style={{
-          padding: '6px 14px', background: 'rgba(255,255,255,0.1)',
-          border: '1px solid rgba(255,255,255,0.2)', borderRadius: 20,
-          color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font)',
+          padding: '6px 14px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: 20, color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font)',
         }}>← Volver</button>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'white', cursor: 'pointer' }}>
+          <input type="checkbox" checked={incluirGraficos} onChange={e => setIncluirGraficos(e.target.checked)} />
+          📊 Incluir gráficos en el reporte
+        </label>
+
         <button onClick={handlePrint} style={{
-          padding: '6px 16px', background: 'var(--red)', border: 'none',
-          borderRadius: 20, color: 'white', fontSize: 12, fontWeight: 600,
-          cursor: 'pointer', fontFamily: 'var(--font)',
+          padding: '6px 16px', background: 'var(--red)', border: 'none', borderRadius: 20,
+          color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)',
         }}>🖨 Imprimir / PDF</button>
+
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-          En el diálogo de impresión, desactiva "Encabezados y pies de página" para una hoja limpia
+          Desactiva "Encabezados y pies de página" del navegador al imprimir
         </span>
       </div>
 
       {/* Contenido imprimible */}
-      <div style={{
-        maxWidth: 750, margin: '0 auto', padding: '70px 32px 50px',
-        fontFamily: 'DM Sans, sans-serif', fontSize: 13, color: '#0F172A',
-      }}>
-        {/* Encabezado con escudo de la organización */}
+      <div style={{ maxWidth: 750, margin: '0 auto', padding: '70px 32px 50px', fontFamily: 'DM Sans, sans-serif', fontSize: 13, color: '#0F172A' }}>
+        {/* Encabezado con escudo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '2px solid #C8102E', paddingBottom: 16, marginBottom: 20 }}>
           {config.escudo ? (
             <img src={config.escudo} alt="Escudo" style={{ width: 60, height: 60, objectFit: 'contain', flexShrink: 0 }} />
@@ -106,20 +178,14 @@ export default function Reporte() {
             <div style={{ width: 60, height: 60, borderRadius: 10, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>🥋</div>
           )}
           <div>
-            <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 22, letterSpacing: 2, color: '#C8102E' }}>
-              {config.fedNombre || 'FEPAKA'}
-            </div>
-            <div style={{ fontSize: 11, color: '#64748B', textTransform: 'uppercase', letterSpacing: 1 }}>
-              Gestión de Arbitraje — Reporte Individual
-            </div>
+            <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 22, letterSpacing: 2, color: '#C8102E' }}>{config.fedNombre || 'FEPAKA'}</div>
+            <div style={{ fontSize: 11, color: '#64748B', textTransform: 'uppercase', letterSpacing: 1 }}>Gestión de Arbitraje — Reporte Individual</div>
           </div>
         </div>
 
         {arbitro && (
           <div style={{ background: '#F1F5F9', borderRadius: 10, padding: '14px 18px', marginBottom: 24 }}>
-            <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 18, letterSpacing: 1, marginBottom: 8 }}>
-              {nombreCompleto(arbitro)}
-            </div>
+            <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 18, letterSpacing: 1, marginBottom: 8 }}>{nombreCompleto(arbitro)}</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 12, color: '#64748B' }}>
               <div><strong>Licencia:</strong> {arbitro.licencia || '—'}</div>
               <div><strong>Provincia:</strong> {arbitro.provincia || '—'}</div>
@@ -131,12 +197,32 @@ export default function Reporte() {
         )}
 
         {Object.keys(porEvento).length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>
-            Sin evaluaciones registradas
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>Sin evaluaciones registradas</div>
+        )}
+
+        {/* Gráficos — solo si el usuario activó la opción */}
+        {incluirGraficos && Object.keys(porEvento).length > 0 && (
+          <div className="graficos-bloque" style={{ marginBottom: 28 }}>
+            <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 14, letterSpacing: 1, color: '#1E293B', marginBottom: 4 }}>
+              GRÁFICOS — {modalidadPredominante.toUpperCase()}
+            </div>
+            <div style={{ fontSize: 10, color: '#94A3B8', marginBottom: 12 }}>
+              Resumen visual del desempeño a través de los eventos en esta modalidad
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ background: '#F8FAFC', borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, textAlign: 'center' }}>Promedio por evento</div>
+                <canvas ref={chartEventoRef} width={320} height={220}></canvas>
+              </div>
+              <div style={{ background: '#F8FAFC', borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, textAlign: 'center' }}>Promedio por criterio</div>
+                <canvas ref={chartCriterioRef} width={320} height={220}></canvas>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Cada bloque de evento es una "página lógica": tabla + su propio footer repetido */}
+        {/* Historial por evento */}
         {Object.entries(porEvento).map(([evId, ev]) => {
           const crits = CRITERIOS[ev.modalidad] || CRITERIOS.kumite
           return (
@@ -220,13 +306,13 @@ export default function Reporte() {
                 })()}
               </table>
 
-              {/* Footer repetido después de CADA bloque de evento — visible también al imprimir */}
-              <FooterBloque />
+              <div style={{ borderTop: '1px solid #E2E8F0', marginTop: 16, paddingTop: 8, fontSize: 9, color: '#94A3B8', textAlign: 'center' }}>
+                {footerText}
+              </div>
             </div>
           )
         })}
 
-        {/* Pie de página final, con fecha de generación */}
         <div style={{ marginTop: 16, borderTop: '1px solid #E2E8F0', paddingTop: 12, fontSize: 10, color: '#94A3B8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
           <span>
             © {year} S2TechGroup · Todos los derechos reservados ·{' '}
