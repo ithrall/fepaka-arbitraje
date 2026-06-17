@@ -1,10 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
+import Footer from '../Footer'
 
 const SIDEBAR_W = 240
 
-export function TopBar({ onHome } = {}) {
+// ─────────────────────────────────────────
+// Hook simple para detectar móvil
+// ─────────────────────────────────────────
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < breakpoint)
+  useEffect(() => {
+    function onResize() { setIsMobile(window.innerWidth < breakpoint) }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [breakpoint])
+  return isMobile
+}
+
+// ─────────────────────────────────────────
+// TOP BAR
+// ─────────────────────────────────────────
+export function TopBar({ onHome, onToggleSidebar, showMenuButton = false } = {}) {
   const { user, logout, config } = useApp()
   const nav = useNavigate()
 
@@ -13,64 +30,74 @@ export function TopBar({ onHome } = {}) {
       position: 'fixed', top: 0, left: 0, right: 0, height: 52,
       background: 'var(--dark)', zIndex: 100,
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 20px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+      padding: '0 12px', borderBottom: '1px solid rgba(255,255,255,0.06)',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: onHome ? 'pointer' : 'default' }}
-        onClick={onHome}
-        title={onHome ? 'Volver al inicio' : ''}>
-        <div style={{
-          width: 32, height: 32, borderRadius: 7,
-          background: config.escudo ? 'transparent' : 'var(--red)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          overflow: 'hidden', flexShrink: 0,
-        }}>
-          {config.escudo
-            ? <img src={config.escudo} alt="Escudo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            : <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'white' }}>FEP</span>
-          }
-        </div>
-        <div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'white', letterSpacing: '2px' }}>
-            {config.fedNombre}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        {showMenuButton && (
+          <button onClick={onToggleSidebar} style={{
+            background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 8,
+            width: 32, height: 32, color: 'white', fontSize: 16, cursor: 'pointer',
+            flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }} aria-label="Abrir menú">☰</button>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: onHome ? 'pointer' : 'default', minWidth: 0 }}
+          onClick={onHome}
+          title={onHome ? 'Volver al inicio' : ''}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 7,
+            background: config.escudo ? 'transparent' : 'var(--red)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden', flexShrink: 0,
+          }}>
+            {config.escudo
+              ? <img src={config.escudo} alt="Escudo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              : <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'white' }}>FEP</span>
+            }
           </div>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-            Gestión de Arbitraje
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'white', letterSpacing: '1.5px', whiteSpace: 'nowrap' }}>
+              {config.fedNombre}
+            </div>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
+              Gestión de Arbitraje
+            </div>
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         {onHome && (
           <button onClick={onHome} style={{
-            padding: '5px 14px', background: 'rgba(255,255,255,0.08)',
+            padding: '5px 10px', background: 'rgba(255,255,255,0.08)',
             border: '1px solid rgba(255,255,255,0.15)', borderRadius: 20,
-            color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-            fontFamily: 'var(--font)', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6,
+            color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+            fontFamily: 'var(--font)', transition: 'all 0.2s',
+            display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
           }}
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.16)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}>
-            🏠 Inicio
+            🏠 <span className="hide-xs">Inicio</span>
           </button>
         )}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          background: 'rgba(255,255,255,0.06)', borderRadius: 20, padding: '4px 12px 4px 4px',
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'rgba(255,255,255,0.06)', borderRadius: 20, padding: '4px 10px 4px 4px',
         }}>
           <div style={{
-            width: 24, height: 24, borderRadius: '50%', background: 'var(--red)',
+            width: 22, height: 22, borderRadius: '50%', background: 'var(--red)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, fontWeight: 600, color: 'white',
+            fontSize: 9, fontWeight: 600, color: 'white', flexShrink: 0,
           }}>
             {user?.nombre?.split(' ').map(x => x[0]).join('').substring(0, 2).toUpperCase()}
           </div>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{user?.nombre}</span>
+          <span className="hide-xs" style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap' }}>{user?.nombre}</span>
         </div>
         <button
           onClick={() => { logout(); nav('/') }}
           style={{
-            padding: '4px 12px', background: 'rgba(255,255,255,0.06)',
+            padding: '4px 10px', background: 'rgba(255,255,255,0.06)',
             border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20,
             color: 'rgba(255,255,255,0.55)', fontSize: 11, cursor: 'pointer',
-            fontFamily: 'var(--font)', transition: 'all 0.2s',
+            fontFamily: 'var(--font)', transition: 'all 0.2s', whiteSpace: 'nowrap',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(200,16,46,0.2)'; e.currentTarget.style.color = '#FCA5A5' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}
@@ -80,11 +107,29 @@ export function TopBar({ onHome } = {}) {
   )
 }
 
-export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSelectSub, onSelectGlobal, onNewEvento }) {
+// ─────────────────────────────────────────
+// SIDEBAR
+// ─────────────────────────────────────────
+export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSelectSub, onSelectGlobal, onNewEvento, isOpen, onClose, isMobile }) {
   const [openEvento, setOpenEvento] = useState(activeEvento?.id || null)
 
   function toggleEvento(evId) {
     setOpenEvento(prev => prev === evId ? null : evId)
+  }
+
+  function handleSelectSub(ev, sub) {
+    onSelectSub(ev, sub)
+    if (isMobile) onClose?.()
+  }
+
+  function handleSelectGlobal(id) {
+    onSelectGlobal(id)
+    if (isMobile) onClose?.()
+  }
+
+  function handleNewEvento() {
+    onNewEvento()
+    if (isMobile) onClose?.()
   }
 
   const subItems = [
@@ -96,140 +141,154 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
   ]
 
   const globalItems = [
-    { id: 'bd-arb',  label: 'Base de Árbitros',    icon: '🥋' },
+    { id: 'bd-arb',  label: 'Base de Árbitros',     icon: '🥋' },
     { id: 'bd-eval', label: 'Base de Evaluadores',  icon: '👤' },
     { id: 'stats',   label: 'Estadísticas Globales', icon: '📈' },
-    { id: 'config',  label: 'Configuración',        icon: '⚙️' },
+    { id: 'config',  label: 'Configuración',         icon: '⚙️' },
   ]
 
   return (
-    <aside style={{
-      position: 'fixed', top: 52, left: 0, bottom: 0,
-      width: SIDEBAR_W, background: 'var(--dark2)',
-      borderRight: '1px solid rgba(255,255,255,0.06)',
-      display: 'flex', flexDirection: 'column',
-      overflowY: 'auto', zIndex: 90,
-    }}>
-      <div style={{ padding: '16px 12px 6px', fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
-        Eventos
-      </div>
+    <>
+      {/* Overlay oscuro en móvil cuando el sidebar está abierto */}
+      {isMobile && isOpen && (
+        <div onClick={onClose} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          zIndex: 95, top: 52,
+        }} />
+      )}
 
-      {eventos.map(ev => {
-        const isOpen = openEvento === ev.id
-        return (
-          <div key={ev.id} style={{ margin: '2px 8px' }}>
+      <aside style={{
+        position: 'fixed', top: 52, left: isMobile ? (isOpen ? 0 : -SIDEBAR_W) : 0, bottom: 0,
+        width: SIDEBAR_W, background: 'var(--dark2)',
+        borderRight: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', flexDirection: 'column',
+        overflowY: 'auto', zIndex: 96,
+        transition: isMobile ? 'left 0.25s ease' : 'none',
+        boxShadow: isMobile && isOpen ? '4px 0 16px rgba(0,0,0,0.3)' : 'none',
+      }}>
+        <div style={{ padding: '16px 12px 6px', fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
+          Eventos
+        </div>
+
+        {eventos.map(ev => {
+          const isOpenEv = openEvento === ev.id
+          return (
+            <div key={ev.id} style={{ margin: '2px 8px' }}>
+              <div
+                onClick={() => toggleEvento(ev.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                  background: isOpenEv ? 'rgba(255,255,255,0.04)' : 'transparent',
+                  transition: 'background 0.15s',
+                }}
+              >
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                  background: ev.estado === 'activo' ? 'var(--green)' : ev.estado === 'finalizado' ? 'var(--red)' : 'var(--gold)',
+                }} />
+                <div style={{
+                  fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.75)',
+                  flex: 1, lineHeight: 1.3, overflow: 'hidden',
+                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {ev.nombre}
+                </div>
+                <div style={{
+                  fontSize: 10, color: 'rgba(255,255,255,0.3)',
+                  transition: 'transform 0.2s', flexShrink: 0,
+                  transform: isOpenEv ? 'rotate(90deg)' : 'rotate(0)',
+                }}>▶</div>
+              </div>
+
+              {isOpenEv && (
+                <div style={{ paddingBottom: 4 }}>
+                  {subItems.map(sub => {
+                    const isActive = activeEvento?.id === ev.id && activeSub === sub.id
+                    return (
+                      <div
+                        key={sub.id}
+                        onClick={() => handleSelectSub(ev, sub.id)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 10px 8px 26px', margin: '1px 8px',
+                          borderRadius: 7, cursor: 'pointer', fontSize: 12,
+                          color: isActive ? 'white' : 'rgba(255,255,255,0.45)',
+                          fontWeight: isActive ? 500 : 400,
+                          background: isActive ? 'rgba(200,16,46,0.15)' : 'transparent',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        <span style={{ fontSize: 13 }}>{sub.icon}</span>
+                        {sub.label}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        <button
+          onClick={handleNewEvento}
+          style={{
+            margin: '6px 12px', padding: '9px 12px',
+            background: 'rgba(200,16,46,0.08)', border: '1px dashed rgba(200,16,46,0.25)',
+            borderRadius: 8, cursor: 'pointer', fontSize: 12,
+            color: 'rgba(200,16,46,0.7)', fontFamily: 'var(--font)',
+            display: 'flex', alignItems: 'center', gap: 6,
+            transition: 'all 0.2s', width: 'calc(100% - 24px)',
+          }}
+        >
+          ＋ Nuevo evento
+        </button>
+
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 12px' }} />
+        <div style={{ padding: '8px 12px 6px', fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
+          Global
+        </div>
+
+        {globalItems.map(item => {
+          const isActive = activeGlobal === item.id
+          return (
             <div
-              onClick={() => toggleEvento(ev.id)}
+              key={item.id}
+              onClick={() => handleSelectGlobal(item.id)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
-                background: isOpen ? 'rgba(255,255,255,0.04)' : 'transparent',
-                transition: 'background 0.15s',
+                padding: '9px 10px', margin: '2px 8px', borderRadius: 8,
+                cursor: 'pointer', fontSize: 12,
+                color: isActive ? 'white' : 'rgba(255,255,255,0.45)',
+                fontWeight: isActive ? 500 : 400,
+                background: isActive ? 'rgba(200,16,46,0.12)' : 'transparent',
+                transition: 'all 0.15s',
               }}
-              onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
-              onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = 'transparent' }}
             >
-              <div style={{
-                width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                background: ev.estado === 'activo' ? 'var(--green)' : ev.estado === 'finalizado' ? 'var(--red)' : 'var(--gold)',
-              }} />
-              <div style={{
-                fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.75)',
-                flex: 1, lineHeight: 1.3, overflow: 'hidden',
-                textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {ev.nombre}
-              </div>
-              <div style={{
-                fontSize: 10, color: 'rgba(255,255,255,0.3)',
-                transition: 'transform 0.2s', flexShrink: 0,
-                transform: isOpen ? 'rotate(90deg)' : 'rotate(0)',
-              }}>▶</div>
+              <span style={{ fontSize: 14 }}>{item.icon}</span>
+              {item.label}
             </div>
-
-            {isOpen && (
-              <div style={{ paddingBottom: 4 }}>
-                {subItems.map(sub => {
-                  const isActive = activeEvento?.id === ev.id && activeSub === sub.id
-                  return (
-                    <div
-                      key={sub.id}
-                      onClick={() => { onSelectSub(ev, sub.id) }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '7px 10px 7px 26px', margin: '1px 8px',
-                        borderRadius: 7, cursor: 'pointer', fontSize: 12,
-                        color: isActive ? 'white' : 'rgba(255,255,255,0.45)',
-                        fontWeight: isActive ? 500 : 400,
-                        background: isActive ? 'rgba(200,16,46,0.15)' : 'transparent',
-                        transition: 'all 0.15s',
-                      }}
-                      onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)' } }}
-                      onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.45)' } }}
-                    >
-                      <span style={{ fontSize: 13 }}>{sub.icon}</span>
-                      {sub.label}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )
-      })}
-
-      <button
-        onClick={onNewEvento}
-        style={{
-          margin: '6px 12px', padding: '8px 12px',
-          background: 'rgba(200,16,46,0.08)', border: '1px dashed rgba(200,16,46,0.25)',
-          borderRadius: 8, cursor: 'pointer', fontSize: 12,
-          color: 'rgba(200,16,46,0.7)', fontFamily: 'var(--font)',
-          display: 'flex', alignItems: 'center', gap: 6,
-          transition: 'all 0.2s', width: 'calc(100% - 24px)',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(200,16,46,0.16)'; e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.borderColor = 'var(--red)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(200,16,46,0.08)'; e.currentTarget.style.color = 'rgba(200,16,46,0.7)'; e.currentTarget.style.borderColor = 'rgba(200,16,46,0.25)' }}
-      >
-        ＋ Nuevo evento
-      </button>
-
-      <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 12px' }} />
-      <div style={{ padding: '8px 12px 6px', fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
-        Global
-      </div>
-
-      {globalItems.map(item => {
-        const isActive = activeGlobal === item.id
-        return (
-          <div
-            key={item.id}
-            onClick={() => onSelectGlobal(item.id)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 10px', margin: '2px 8px', borderRadius: 8,
-              cursor: 'pointer', fontSize: 12,
-              color: isActive ? 'white' : 'rgba(255,255,255,0.45)',
-              fontWeight: isActive ? 500 : 400,
-              background: isActive ? 'rgba(200,16,46,0.12)' : 'transparent',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)' } }}
-            onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.45)' } }}
-          >
-            <span style={{ fontSize: 14 }}>{item.icon}</span>
-            {item.label}
-          </div>
-        )
-      })}
-    </aside>
+          )
+        })}
+      </aside>
+    </>
   )
 }
 
+// ─────────────────────────────────────────
+// APP SHELL
+// ─────────────────────────────────────────
 export function AppShell({ children, eventos = [], activeEvento, activeSub, activeGlobal, onSelectSub, onSelectGlobal, onNewEvento, onHome }) {
+  const isMobile = useIsMobile()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <TopBar onHome={onHome} />
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <TopBar
+        onHome={onHome}
+        showMenuButton={isMobile}
+        onToggleSidebar={() => setSidebarOpen(v => !v)}
+      />
       <Sidebar
         eventos={eventos}
         activeEvento={activeEvento}
@@ -238,18 +297,33 @@ export function AppShell({ children, eventos = [], activeEvento, activeSub, acti
         onSelectSub={onSelectSub}
         onSelectGlobal={onSelectGlobal}
         onNewEvento={onNewEvento}
+        isOpen={isMobile ? sidebarOpen : true}
+        onClose={() => setSidebarOpen(false)}
+        isMobile={isMobile}
       />
       <main style={{
-        marginTop: 52, marginLeft: SIDEBAR_W,
+        marginTop: 52,
+        marginLeft: isMobile ? 0 : SIDEBAR_W,
         minHeight: 'calc(100vh - 52px)',
-        padding: 24,
+        padding: isMobile ? 14 : 24,
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
       }}>
-        {children}
+        <div style={{ flex: 1 }}>
+          {children}
+        </div>
+        <div style={{ marginLeft: isMobile ? 0 : 0 }}>
+          <Footer />
+        </div>
       </main>
     </div>
   )
 }
 
+// ─────────────────────────────────────────
+// EVENTO BANNER
+// ─────────────────────────────────────────
 export function EventoBanner({ evento }) {
   if (!evento) return null
   const fecha = evento.fecha
@@ -259,14 +333,14 @@ export function EventoBanner({ evento }) {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12,
       background: 'var(--dark2)', borderRadius: 10,
-      padding: '10px 16px', marginBottom: 20,
+      padding: '10px 16px', marginBottom: 20, flexWrap: 'wrap',
     }}>
       <span style={{
         background: 'var(--red)', borderRadius: 6, padding: '3px 10px',
         fontSize: 10, fontWeight: 600, color: 'white',
         letterSpacing: '1px', textTransform: 'uppercase', flexShrink: 0,
       }}>Evento</span>
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'white' }}>{evento.nombre}</div>
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
           {[fecha, evento.sede].filter(Boolean).join(' · ')}
@@ -276,11 +350,14 @@ export function EventoBanner({ evento }) {
   )
 }
 
+// ─────────────────────────────────────────
+// PAGE HEADER
+// ─────────────────────────────────────────
 export function PageHeader({ title, subtitle, action }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
-      <div>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: '2px', color: 'var(--dark)', margin: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ minWidth: 0 }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(18px, 5vw, 22px)', letterSpacing: '2px', color: 'var(--dark)', margin: 0 }}>
           {title}
         </h1>
         {subtitle && <p style={{ fontSize: 13, color: 'var(--gray)', marginTop: 4 }}>{subtitle}</p>}
@@ -290,6 +367,9 @@ export function PageHeader({ title, subtitle, action }) {
   )
 }
 
+// ─────────────────────────────────────────
+// CSV DROP ZONE
+// ─────────────────────────────────────────
 export function CsvDropZone({ accept, onChange, title, description, hint }) {
   const [drag, setDrag] = useState(false)
 
@@ -306,14 +386,14 @@ export function CsvDropZone({ accept, onChange, title, description, hint }) {
         border: `2px dashed ${drag ? 'var(--red)' : 'var(--border)'}`,
         borderRadius: 12, padding: '18px 20px', cursor: 'pointer',
         background: drag ? 'var(--red-light)' : 'var(--light)',
-        transition: 'all 0.2s', position: 'relative',
+        transition: 'all 0.2s', position: 'relative', flexWrap: 'wrap',
       }}
       onDragOver={e => { e.preventDefault(); setDrag(true) }}
       onDragLeave={() => setDrag(false)}
       onDrop={handleDrop}
     >
       <span style={{ fontSize: 28, flexShrink: 0 }}>📂</span>
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 4 }}>
           {title || 'Haz clic o arrastra el archivo CSV aquí'}
         </div>
@@ -325,6 +405,9 @@ export function CsvDropZone({ accept, onChange, title, description, hint }) {
   )
 }
 
+// ─────────────────────────────────────────
+// ESCUDO UPLOAD
+// ─────────────────────────────────────────
 export function EscudoUpload({ escudo, onChange, onRemove }) {
   const [drag, setDrag] = useState(false)
 
@@ -339,7 +422,7 @@ export function EscudoUpload({ escudo, onChange, onRemove }) {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
       <div style={{
         width: 88, height: 88, borderRadius: 14, flexShrink: 0,
         background: 'var(--light)', border: '1px solid var(--border)',
@@ -352,7 +435,7 @@ export function EscudoUpload({ escudo, onChange, onRemove }) {
         }
       </div>
 
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, minWidth: 200 }}>
         <label
           style={{
             display: 'flex', alignItems: 'center', gap: 12,

@@ -6,6 +6,7 @@ import { TopBar } from '../components/layout'
 import { Spinner, Empty, ToastContainer, Badge } from '../components/ui'
 import { CriteriaCard, ScorePanel, ProgressBar, EventoBanner } from '../components/data'
 import { CRITERIOS, ESTADOS, nombreCompleto } from '../utils/criterios'
+import Footer from '../components/Footer'
 import api from '../api'
 
 export default function Evaluar() {
@@ -305,6 +306,7 @@ export default function Evaluar() {
           )}
         </div>
       </div>
+      <Footer />
     </div>
   )
 }

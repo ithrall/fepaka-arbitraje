@@ -4,11 +4,9 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-/* ── Reset ── */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html { font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
-/* ── Tokens ── */
 :root {
   --red: #C8102E; --red-dark: #9B0C22; --red-light: #FEF2F2;
   --gold: #F5A623; --gold-light: #FEF3DC;
@@ -28,59 +26,58 @@ html { font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoot
   --transition: all 0.2s ease;
 }
 
-/* ── Base ── */
 body {
   font-family: var(--font);
   background: var(--light);
   color: var(--dark);
   line-height: 1.5;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
-/* ── Typography ── */
 h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: 0.05em; line-height: 1.1; }
-code { font-family: var(--font-mono); font-size: 11px; background: var(--light); padding: 2px 6px; border-radius: var(--radius-sm); }
+code { font-family: var(--font-mono); font-size: 11px; background: var(--light); padding: 2px 6px; border-radius: var(--radius-sm); word-break: break-all; }
 a { color: var(--red); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-/* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--gray3); }
 
-/* ── Focus visible ── */
 :focus-visible { outline: 2px solid var(--red); outline-offset: 2px; border-radius: var(--radius-sm); }
-
-/* ── Selection ── */
 ::selection { background: rgba(200,16,46,0.15); color: var(--dark); }
 
-/* ── Layout ── */
 .screen { min-height: 100vh; display: flex; flex-direction: column; }
 .app-body { flex: 1; padding: 20px; max-width: 1100px; margin: 0 auto; width: 100%; }
 
-/* ── Grid helpers ── */
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 .row4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 
-/* ── Slider thumb ── */
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 20px; height: 20px; border-radius: 50%;
+  width: 22px; height: 22px; border-radius: 50%;
   background: var(--red); cursor: pointer;
   border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.2);
   transition: transform 0.1s;
 }
 input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 input[type=range]::-moz-range-thumb {
-  width: 20px; height: 20px; border-radius: 50%;
+  width: 22px; height: 22px; border-radius: 50%;
   background: var(--red); cursor: pointer;
   border: 2px solid white;
 }
-input[type=range] { -webkit-appearance: none; appearance: none; }
+input[type=range] { -webkit-appearance: none; appearance: none; touch-action: none; }
 
-/* ── Login screen ── */
+/* Inputs con tamaño táctil mínimo de 44px en móvil (evita zoom automático iOS con font-size 16px) */
+input, select, textarea, button {
+  font-size: 16px;
+}
+@media (min-width: 769px) {
+  input, select, textarea, button { font-size: inherit; }
+}
+
 .login-screen {
   min-height: 100vh; background: var(--dark);
   display: flex; align-items: center; justify-content: center; padding: 32px 16px;
@@ -91,7 +88,6 @@ input[type=range] { -webkit-appearance: none; appearance: none; }
   box-shadow: 0 24px 64px rgba(0,0,0,0.4);
 }
 
-/* ── Animations ── */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -101,7 +97,6 @@ input[type=range] { -webkit-appearance: none; appearance: none; }
 .animate-fade { animation: fadeIn 0.2s ease; }
 .animate-slide { animation: slideUp 0.25s ease; }
 
-/* ── CSV Drop zone ── */
 .csv-drop {
   border: 2px dashed var(--border); border-radius: var(--radius-xl);
   padding: 24px 20px; text-align: center; cursor: pointer;
@@ -109,43 +104,30 @@ input[type=range] { -webkit-appearance: none; appearance: none; }
 }
 .csv-drop:hover { border-color: var(--red); background: var(--red-light); }
 
-/* ── Select list (asignación) ── */
 .select-list {
   max-height: 260px; overflow-y: auto;
   border: 1px solid var(--border); border-radius: var(--radius-xl);
   margin-top: 8px;
 }
 
-/* ── Responsive ── */
-@media (max-width: 640px) {
-  .row2, .row3, .row4 { grid-template-columns: 1fr; }
-  .app-body { padding: 12px; }
-  .login-box { padding: 24px 20px; }
-}
+/* Oculta texto en pantallas muy angostas, manteniendo iconos */
+.hide-xs { display: inline; }
 
-/* ── Sidebar layout ── */
-.sidebar-layout main {
-  margin-top: 52px;
-  margin-left: 240px;
-  min-height: calc(100vh - 52px);
-  padding: 24px;
-}
+/* Tablas: scroll horizontal en móvil en vez de romper layout */
+table { min-width: 100%; }
 
-/* ── Scrollbar sidebar ── */
-.sidebar-scroll::-webkit-scrollbar { width: 4px; }
-.sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-
-/* ── Responsive móvil ── */
+/* ── Responsive: Tablet y móvil grande ── */
 @media (max-width: 768px) {
-  .app-body { padding: 12px; }
+  html { font-size: 13px; }
   .row2, .row3, .row4 { grid-template-columns: 1fr; }
-  .prom-bar { grid-template-columns: repeat(3,1fr) auto; }
-  .sidebar-layout main { margin-left: 0; }
+  .app-body { padding: 12px; }
+  .login-box { padding: 28px 22px; }
 }
 
+/* ── Responsive: Móvil ── */
 @media (max-width: 480px) {
   .login-box { padding: 24px 16px; }
-  .prom-bar { grid-template-columns: repeat(2,1fr) auto; font-size: 12px; }
+  .hide-xs { display: none; }
 }
 
 /* ── Print / PDF ── */
