@@ -21,6 +21,9 @@ router.get('/mia/arbitro/:arbitroId/evento/:eventoId', authMiddleware, async (re
 });
 
 // GET resumen de promedios por árbitro en un evento, para una modalidad
+// FIX: el área se obtiene con una subconsulta separada (LIMIT 1) para evitar
+// que un árbitro con más de un registro en area_arbitros (por un cambio de área
+// mal limpiado anteriormente) genere filas duplicadas en el GROUP BY.
 router.get('/resumen/evento/:eventoId', authMiddleware, async (req, res) => {
   try {
     const modalidad = req.query.modalidad || 'kumite';
@@ -36,18 +39,24 @@ router.get('/resumen/evento/:eventoId', authMiddleware, async (req, res) => {
               THEN a.nombre || ' ' || a.apellido
               ELSE a.nombre END as nombre_completo,
          a.nombre, a.apellido, a.provincia, a.licencia, a.fepaka_id, a.foto_url,
-         ar.nombre as area_nombre,
+         (
+           SELECT ar.nombre FROM area_arbitros aa
+           JOIN areas ar ON ar.id = aa.area_id
+           WHERE aa.arbitro_id = a.id AND ar.evento_id = $1
+           ORDER BY aa.area_id DESC LIMIT 1
+         ) as area_nombre,
          COUNT(e.id) as num_evaluaciones,
          ${avgCols},
          ROUND(((${sumCols})/${crits.length})::numeric,2) as promedio_total
        FROM arbitros a
        LEFT JOIN evaluaciones e ON e.arbitro_id = a.id AND e.evento_id = $1 AND e.modalidad = $2
-       LEFT JOIN area_arbitros aa ON aa.arbitro_id = a.id
-       LEFT JOIN areas ar ON ar.id = aa.area_id AND ar.evento_id = $1
        WHERE
-         a.id IN (SELECT arbitro_id FROM evento_arbitros WHERE evento_id = $1)
-         OR a.evento_id = $1
-       GROUP BY a.id, ar.nombre
+         a.eliminado = false
+         AND (
+           a.id IN (SELECT arbitro_id FROM evento_arbitros WHERE evento_id = $1)
+           OR a.evento_id = $1
+         )
+       GROUP BY a.id
        ORDER BY promedio_total DESC NULLS LAST`,
       [req.params.eventoId, modalidad]
     );
@@ -56,7 +65,7 @@ router.get('/resumen/evento/:eventoId', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET detalle por evaluador, para una modalidad
+// GET detalle por evaluador
 router.get('/detalle/evento/:eventoId', authMiddleware, async (req, res) => {
   try {
     const modalidad = req.query.modalidad || 'kumite';
@@ -86,11 +95,11 @@ router.get('/detalle/evento/:eventoId', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET historial de un árbitro en todos los eventos y modalidades
+// GET historial de un árbitro (todos los eventos)
 router.get('/historial/arbitro/:arbitroId', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT e.*, ev.nombre as evento_nombre, ev.fecha,
+      `SELECT e.*, ev.nombre as evento_nombre, ev.fecha, e.modalidad,
               u.nombre as evaluador_nombre, ar.nombre as area_nombre
        FROM evaluaciones e
        JOIN eventos ev ON ev.id = e.evento_id
@@ -104,7 +113,7 @@ router.get('/historial/arbitro/:arbitroId', authMiddleware, async (req, res) => 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET gráfica por criterio, para una modalidad
+// GET estadísticas por criterio (para gráfica)
 router.get('/grafica/evento/:eventoId', authMiddleware, async (req, res) => {
   try {
     const modalidad = req.query.modalidad || 'kumite';
@@ -112,8 +121,7 @@ router.get('/grafica/evento/:eventoId', authMiddleware, async (req, res) => {
     const avgCols = crits.map(c => `ROUND(AVG(e.${c})::numeric,2) as ${c}`).join(',\n');
 
     const result = await pool.query(
-      `SELECT ${avgCols} FROM evaluaciones e
-       WHERE e.evento_id = $1 AND e.modalidad = $2`,
+      `SELECT ${avgCols} FROM evaluaciones e WHERE e.evento_id = $1 AND e.modalidad = $2`,
       [req.params.eventoId, modalidad]
     );
 
@@ -132,7 +140,7 @@ router.get('/grafica/evento/:eventoId', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST guardar evaluación — la modalidad viene en el body, no del evento
+// POST guardar evaluación
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const {

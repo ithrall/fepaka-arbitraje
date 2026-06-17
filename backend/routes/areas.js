@@ -58,40 +58,73 @@ router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE área
+// DELETE área (también limpia sus asignaciones de árbitros)
 router.delete('/:id', authMiddleware, adminOnly, async (req, res) => {
   try {
+    await pool.query('DELETE FROM area_arbitros WHERE area_id=$1', [req.params.id]);
     await pool.query('DELETE FROM areas WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST asignar árbitro a un área (lo mueve si estaba en otra del mismo evento)
+// POST asignar árbitro a un área — usando una transacción para garantizar
+// que el árbitro quede en UNA SOLA área del evento, sin importar errores previos.
 router.post('/:id/arbitros', authMiddleware, adminOnly, async (req, res) => {
+  const client = await pool.connect();
   try {
     const { arbitro_id, evento_id } = req.body;
 
-    await pool.query(
+    await client.query('BEGIN');
+
+    // Eliminar TODAS las asignaciones previas de este árbitro en CUALQUIER área de este evento
+    // (cubre el caso de datos previos duplicados/huérfanos)
+    await client.query(
       `DELETE FROM area_arbitros
        WHERE arbitro_id = $1
        AND area_id IN (SELECT id FROM areas WHERE evento_id = $2)`,
       [arbitro_id, evento_id]
     );
 
-    await pool.query(
-      'INSERT INTO area_arbitros (area_id, arbitro_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+    // Asignar a la nueva área
+    await client.query(
+      'INSERT INTO area_arbitros (area_id, arbitro_id) VALUES ($1,$2)',
       [req.params.id, arbitro_id]
     );
 
+    await client.query('COMMIT');
     res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
-// DELETE quitar árbitro de un área
+// DELETE quitar árbitro de área
 router.delete('/:id/arbitros/:arbId', authMiddleware, adminOnly, async (req, res) => {
   try {
     await pool.query('DELETE FROM area_arbitros WHERE area_id=$1 AND arbitro_id=$2', [req.params.id, req.params.arbId]);
     res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST utilidad: limpiar duplicados existentes de area_arbitros
+// (un mismo arbitro_id asignado a más de un área del mismo evento)
+router.post('/limpiar-duplicados/:eventoId', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `DELETE FROM area_arbitros aa
+       WHERE aa.area_id IN (SELECT id FROM areas WHERE evento_id = $1)
+       AND aa.area_id NOT IN (
+         SELECT MAX(aa2.area_id) FROM area_arbitros aa2
+         JOIN areas ar2 ON ar2.id = aa2.area_id
+         WHERE ar2.evento_id = $1 AND aa2.arbitro_id = aa.arbitro_id
+         GROUP BY aa2.arbitro_id
+       )`,
+      [req.params.eventoId]
+    );
+    res.json({ ok: true, eliminados: result.rowCount });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
