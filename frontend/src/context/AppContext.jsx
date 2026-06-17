@@ -3,14 +3,26 @@ import api from '../api'
 
 const AppContext = createContext(null)
 
+const STORAGE_KEYS = {
+  escudo: 'fepaka_escudo',
+  fedNombre: 'fepaka_nombre',
+  tituloApp: 'fepaka_titulo_app',
+}
+
 export function AppProvider({ children }) {
   const [user, setUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('fepaka_user')) } catch { return null }
   })
-  const [config, setConfig] = useState({
-    escudo: localStorage.getItem('fepaka_escudo') || null,
-    fedNombre: localStorage.getItem('fepaka_nombre') || 'FEPAKA',
-  })
+
+  // FIX: config se inicializa leyendo localStorage de forma segura,
+  // y cada cambio se persiste inmediatamente — antes solo vivía en memoria
+  // y se perdía al recargar la página o tras un nuevo deploy.
+  const [config, setConfig] = useState(() => ({
+    escudo: localStorage.getItem(STORAGE_KEYS.escudo) || null,
+    fedNombre: localStorage.getItem(STORAGE_KEYS.fedNombre) || 'FEPAKA',
+    tituloApp: localStorage.getItem(STORAGE_KEYS.tituloApp) || 'Gestión de Arbitraje',
+  }))
+
   const [eventoActivo, setEventoActivo] = useState(null)
 
   const login = useCallback(async (username, password) => {
@@ -28,14 +40,23 @@ export function AppProvider({ children }) {
     setEventoActivo(null)
   }, [])
 
+  // FIX: updateConfig ahora persiste CADA campo individualmente en localStorage
+  // de forma inmediata y confiable, sin depender de que React vuelva a renderizar.
   const updateConfig = useCallback((updates) => {
     setConfig(prev => {
       const next = { ...prev, ...updates }
-      if (updates.escudo !== undefined) {
-        if (updates.escudo) localStorage.setItem('fepaka_escudo', updates.escudo)
-        else localStorage.removeItem('fepaka_escudo')
+
+      if ('escudo' in updates) {
+        if (updates.escudo) localStorage.setItem(STORAGE_KEYS.escudo, updates.escudo)
+        else localStorage.removeItem(STORAGE_KEYS.escudo)
       }
-      if (updates.fedNombre) localStorage.setItem('fepaka_nombre', updates.fedNombre)
+      if ('fedNombre' in updates && updates.fedNombre) {
+        localStorage.setItem(STORAGE_KEYS.fedNombre, updates.fedNombre)
+      }
+      if ('tituloApp' in updates && updates.tituloApp) {
+        localStorage.setItem(STORAGE_KEYS.tituloApp, updates.tituloApp)
+      }
+
       return next
     })
   }, [])

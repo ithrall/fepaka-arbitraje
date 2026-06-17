@@ -5,9 +5,6 @@ import Footer from '../Footer'
 
 const SIDEBAR_W = 240
 
-// ─────────────────────────────────────────
-// Hook simple para detectar móvil
-// ─────────────────────────────────────────
 function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < breakpoint)
   useEffect(() => {
@@ -18,9 +15,6 @@ function useIsMobile(breakpoint = 768) {
   return isMobile
 }
 
-// ─────────────────────────────────────────
-// TOP BAR
-// ─────────────────────────────────────────
 export function TopBar({ onHome, onToggleSidebar, showMenuButton = false } = {}) {
   const { user, logout, config } = useApp()
   const nav = useNavigate()
@@ -50,7 +44,7 @@ export function TopBar({ onHome, onToggleSidebar, showMenuButton = false } = {})
             overflow: 'hidden', flexShrink: 0,
           }}>
             {config.escudo
-              ? <img src={config.escudo} alt="Escudo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              ? <img src={config.escudo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
               : <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'white' }}>FEP</span>
             }
           </div>
@@ -58,8 +52,9 @@ export function TopBar({ onHome, onToggleSidebar, showMenuButton = false } = {})
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'white', letterSpacing: '1.5px', whiteSpace: 'nowrap' }}>
               {config.fedNombre}
             </div>
+            {/* FIX: el subtítulo ahora viene de config.tituloApp (editable en Configuración) en vez de texto fijo */}
             <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
-              Gestión de Arbitraje
+              {config.tituloApp}
             </div>
           </div>
         </div>
@@ -107,30 +102,13 @@ export function TopBar({ onHome, onToggleSidebar, showMenuButton = false } = {})
   )
 }
 
-// ─────────────────────────────────────────
-// SIDEBAR
-// ─────────────────────────────────────────
 export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSelectSub, onSelectGlobal, onNewEvento, isOpen, onClose, isMobile }) {
   const [openEvento, setOpenEvento] = useState(activeEvento?.id || null)
 
-  function toggleEvento(evId) {
-    setOpenEvento(prev => prev === evId ? null : evId)
-  }
-
-  function handleSelectSub(ev, sub) {
-    onSelectSub(ev, sub)
-    if (isMobile) onClose?.()
-  }
-
-  function handleSelectGlobal(id) {
-    onSelectGlobal(id)
-    if (isMobile) onClose?.()
-  }
-
-  function handleNewEvento() {
-    onNewEvento()
-    if (isMobile) onClose?.()
-  }
+  function toggleEvento(evId) { setOpenEvento(prev => prev === evId ? null : evId) }
+  function handleSelectSub(ev, sub) { onSelectSub(ev, sub); if (isMobile) onClose?.() }
+  function handleSelectGlobal(id) { onSelectGlobal(id); if (isMobile) onClose?.() }
+  function handleNewEvento() { onNewEvento(); if (isMobile) onClose?.() }
 
   const subItems = [
     { id: 'arb',     label: 'Árbitros',    icon: '🥋' },
@@ -149,20 +127,13 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
 
   return (
     <>
-      {/* Overlay oscuro en móvil cuando el sidebar está abierto */}
       {isMobile && isOpen && (
-        <div onClick={onClose} style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-          zIndex: 95, top: 52,
-        }} />
+        <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 95, top: 52 }} />
       )}
-
       <aside style={{
         position: 'fixed', top: 52, left: isMobile ? (isOpen ? 0 : -SIDEBAR_W) : 0, bottom: 0,
-        width: SIDEBAR_W, background: 'var(--dark2)',
-        borderRight: '1px solid rgba(255,255,255,0.06)',
-        display: 'flex', flexDirection: 'column',
-        overflowY: 'auto', zIndex: 96,
+        width: SIDEBAR_W, background: 'var(--dark2)', borderRight: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', flexDirection: 'column', overflowY: 'auto', zIndex: 96,
         transition: isMobile ? 'left 0.25s ease' : 'none',
         boxShadow: isMobile && isOpen ? '4px 0 16px rgba(0,0,0,0.3)' : 'none',
       }}>
@@ -174,31 +145,18 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
           const isOpenEv = openEvento === ev.id
           return (
             <div key={ev.id} style={{ margin: '2px 8px' }}>
-              <div
-                onClick={() => toggleEvento(ev.id)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
-                  background: isOpenEv ? 'rgba(255,255,255,0.04)' : 'transparent',
-                  transition: 'background 0.15s',
-                }}
-              >
+              <div onClick={() => toggleEvento(ev.id)} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                background: isOpenEv ? 'rgba(255,255,255,0.04)' : 'transparent', transition: 'background 0.15s',
+              }}>
                 <div style={{
                   width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
                   background: ev.estado === 'activo' ? 'var(--green)' : ev.estado === 'finalizado' ? 'var(--red)' : 'var(--gold)',
                 }} />
-                <div style={{
-                  fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.75)',
-                  flex: 1, lineHeight: 1.3, overflow: 'hidden',
-                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.75)', flex: 1, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {ev.nombre}
                 </div>
-                <div style={{
-                  fontSize: 10, color: 'rgba(255,255,255,0.3)',
-                  transition: 'transform 0.2s', flexShrink: 0,
-                  transform: isOpenEv ? 'rotate(90deg)' : 'rotate(0)',
-                }}>▶</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', transition: 'transform 0.2s', flexShrink: 0, transform: isOpenEv ? 'rotate(90deg)' : 'rotate(0)' }}>▶</div>
               </div>
 
               {isOpenEv && (
@@ -206,21 +164,13 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
                   {subItems.map(sub => {
                     const isActive = activeEvento?.id === ev.id && activeSub === sub.id
                     return (
-                      <div
-                        key={sub.id}
-                        onClick={() => handleSelectSub(ev, sub.id)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 8,
-                          padding: '8px 10px 8px 26px', margin: '1px 8px',
-                          borderRadius: 7, cursor: 'pointer', fontSize: 12,
-                          color: isActive ? 'white' : 'rgba(255,255,255,0.45)',
-                          fontWeight: isActive ? 500 : 400,
-                          background: isActive ? 'rgba(200,16,46,0.15)' : 'transparent',
-                          transition: 'all 0.15s',
-                        }}
-                      >
-                        <span style={{ fontSize: 13 }}>{sub.icon}</span>
-                        {sub.label}
+                      <div key={sub.id} onClick={() => handleSelectSub(ev, sub.id)} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 26px', margin: '1px 8px',
+                        borderRadius: 7, cursor: 'pointer', fontSize: 12,
+                        color: isActive ? 'white' : 'rgba(255,255,255,0.45)', fontWeight: isActive ? 500 : 400,
+                        background: isActive ? 'rgba(200,16,46,0.15)' : 'transparent', transition: 'all 0.15s',
+                      }}>
+                        <span style={{ fontSize: 13 }}>{sub.icon}</span>{sub.label}
                       </div>
                     )
                   })}
@@ -230,19 +180,11 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
           )
         })}
 
-        <button
-          onClick={handleNewEvento}
-          style={{
-            margin: '6px 12px', padding: '9px 12px',
-            background: 'rgba(200,16,46,0.08)', border: '1px dashed rgba(200,16,46,0.25)',
-            borderRadius: 8, cursor: 'pointer', fontSize: 12,
-            color: 'rgba(200,16,46,0.7)', fontFamily: 'var(--font)',
-            display: 'flex', alignItems: 'center', gap: 6,
-            transition: 'all 0.2s', width: 'calc(100% - 24px)',
-          }}
-        >
-          ＋ Nuevo evento
-        </button>
+        <button onClick={handleNewEvento} style={{
+          margin: '6px 12px', padding: '9px 12px', background: 'rgba(200,16,46,0.08)', border: '1px dashed rgba(200,16,46,0.25)',
+          borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'rgba(200,16,46,0.7)', fontFamily: 'var(--font)',
+          display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s', width: 'calc(100% - 24px)',
+        }}>＋ Nuevo evento</button>
 
         <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 12px' }} />
         <div style={{ padding: '8px 12px 6px', fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
@@ -252,21 +194,12 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
         {globalItems.map(item => {
           const isActive = activeGlobal === item.id
           return (
-            <div
-              key={item.id}
-              onClick={() => handleSelectGlobal(item.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '9px 10px', margin: '2px 8px', borderRadius: 8,
-                cursor: 'pointer', fontSize: 12,
-                color: isActive ? 'white' : 'rgba(255,255,255,0.45)',
-                fontWeight: isActive ? 500 : 400,
-                background: isActive ? 'rgba(200,16,46,0.12)' : 'transparent',
-                transition: 'all 0.15s',
-              }}
-            >
-              <span style={{ fontSize: 14 }}>{item.icon}</span>
-              {item.label}
+            <div key={item.id} onClick={() => handleSelectGlobal(item.id)} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', margin: '2px 8px', borderRadius: 8,
+              cursor: 'pointer', fontSize: 12, color: isActive ? 'white' : 'rgba(255,255,255,0.45)', fontWeight: isActive ? 500 : 400,
+              background: isActive ? 'rgba(200,16,46,0.12)' : 'transparent', transition: 'all 0.15s',
+            }}>
+              <span style={{ fontSize: 14 }}>{item.icon}</span>{item.label}
             </div>
           )
         })}
@@ -275,91 +208,50 @@ export function Sidebar({ eventos, activeEvento, activeSub, activeGlobal, onSele
   )
 }
 
-// ─────────────────────────────────────────
-// APP SHELL
-// ─────────────────────────────────────────
 export function AppShell({ children, eventos = [], activeEvento, activeSub, activeGlobal, onSelectSub, onSelectGlobal, onNewEvento, onHome }) {
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <TopBar
-        onHome={onHome}
-        showMenuButton={isMobile}
-        onToggleSidebar={() => setSidebarOpen(v => !v)}
-      />
+      <TopBar onHome={onHome} showMenuButton={isMobile} onToggleSidebar={() => setSidebarOpen(v => !v)} />
       <Sidebar
-        eventos={eventos}
-        activeEvento={activeEvento}
-        activeSub={activeSub}
-        activeGlobal={activeGlobal}
-        onSelectSub={onSelectSub}
-        onSelectGlobal={onSelectGlobal}
-        onNewEvento={onNewEvento}
-        isOpen={isMobile ? sidebarOpen : true}
-        onClose={() => setSidebarOpen(false)}
-        isMobile={isMobile}
+        eventos={eventos} activeEvento={activeEvento} activeSub={activeSub} activeGlobal={activeGlobal}
+        onSelectSub={onSelectSub} onSelectGlobal={onSelectGlobal} onNewEvento={onNewEvento}
+        isOpen={isMobile ? sidebarOpen : true} onClose={() => setSidebarOpen(false)} isMobile={isMobile}
       />
       <main style={{
-        marginTop: 52,
-        marginLeft: isMobile ? 0 : SIDEBAR_W,
-        minHeight: 'calc(100vh - 52px)',
-        padding: isMobile ? 14 : 24,
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
+        marginTop: 52, marginLeft: isMobile ? 0 : SIDEBAR_W, minHeight: 'calc(100vh - 52px)',
+        padding: isMobile ? 14 : 24, flex: 1, display: 'flex', flexDirection: 'column',
       }}>
-        <div style={{ flex: 1 }}>
-          {children}
-        </div>
-        <div style={{ marginLeft: isMobile ? 0 : 0 }}>
-          <Footer />
-        </div>
+        <div style={{ flex: 1 }}>{children}</div>
+        <Footer />
       </main>
     </div>
   )
 }
 
-// ─────────────────────────────────────────
-// EVENTO BANNER
-// ─────────────────────────────────────────
 export function EventoBanner({ evento }) {
   if (!evento) return null
   const fecha = evento.fecha
     ? new Date(evento.fecha + 'T12:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
     : ''
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      background: 'var(--dark2)', borderRadius: 10,
-      padding: '10px 16px', marginBottom: 20, flexWrap: 'wrap',
-    }}>
-      <span style={{
-        background: 'var(--red)', borderRadius: 6, padding: '3px 10px',
-        fontSize: 10, fontWeight: 600, color: 'white',
-        letterSpacing: '1px', textTransform: 'uppercase', flexShrink: 0,
-      }}>Evento</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--dark2)', borderRadius: 10, padding: '10px 16px', marginBottom: 20, flexWrap: 'wrap' }}>
+      <span style={{ background: 'var(--red)', borderRadius: 6, padding: '3px 10px', fontSize: 10, fontWeight: 600, color: 'white', letterSpacing: '1px', textTransform: 'uppercase', flexShrink: 0 }}>Evento</span>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'white' }}>{evento.nombre}</div>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-          {[fecha, evento.sede].filter(Boolean).join(' · ')}
-        </div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{[fecha, evento.sede].filter(Boolean).join(' · ')}</div>
       </div>
     </div>
   )
 }
 
-// ─────────────────────────────────────────
-// PAGE HEADER
-// ─────────────────────────────────────────
 export function PageHeader({ title, subtitle, action }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
       <div style={{ minWidth: 0 }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(18px, 5vw, 22px)', letterSpacing: '2px', color: 'var(--dark)', margin: 0 }}>
-          {title}
-        </h1>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(18px, 5vw, 22px)', letterSpacing: '2px', color: 'var(--dark)', margin: 0 }}>{title}</h1>
         {subtitle && <p style={{ fontSize: 13, color: 'var(--gray)', marginTop: 4 }}>{subtitle}</p>}
       </div>
       {action && <div>{action}</div>}
@@ -367,36 +259,19 @@ export function PageHeader({ title, subtitle, action }) {
   )
 }
 
-// ─────────────────────────────────────────
-// CSV DROP ZONE
-// ─────────────────────────────────────────
 export function CsvDropZone({ accept, onChange, title, description, hint }) {
   const [drag, setDrag] = useState(false)
-
-  function handleDrop(e) {
-    e.preventDefault(); setDrag(false)
-    const file = e.dataTransfer.files[0]
-    if (file) onChange({ target: { files: [file] } })
-  }
-
+  function handleDrop(e) { e.preventDefault(); setDrag(false); const file = e.dataTransfer.files[0]; if (file) onChange({ target: { files: [file] } }) }
   return (
-    <label
-      style={{
-        display: 'flex', alignItems: 'center', gap: 16,
-        border: `2px dashed ${drag ? 'var(--red)' : 'var(--border)'}`,
-        borderRadius: 12, padding: '18px 20px', cursor: 'pointer',
-        background: drag ? 'var(--red-light)' : 'var(--light)',
-        transition: 'all 0.2s', position: 'relative', flexWrap: 'wrap',
-      }}
-      onDragOver={e => { e.preventDefault(); setDrag(true) }}
-      onDragLeave={() => setDrag(false)}
-      onDrop={handleDrop}
-    >
+    <label style={{
+      display: 'flex', alignItems: 'center', gap: 16, border: `2px dashed ${drag ? 'var(--red)' : 'var(--border)'}`,
+      borderRadius: 12, padding: '18px 20px', cursor: 'pointer', background: drag ? 'var(--red-light)' : 'var(--light)',
+      transition: 'all 0.2s', position: 'relative', flexWrap: 'wrap',
+    }}
+      onDragOver={e => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)} onDrop={handleDrop}>
       <span style={{ fontSize: 28, flexShrink: 0 }}>📂</span>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 4 }}>
-          {title || 'Haz clic o arrastra el archivo CSV aquí'}
-        </div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 4 }}>{title || 'Haz clic o arrastra el archivo CSV aquí'}</div>
         {description && <div style={{ fontSize: 12, color: 'var(--gray)', lineHeight: 1.4 }}>{description}</div>}
         {hint && <div style={{ fontSize: 11, color: 'var(--gray2)', marginTop: 4 }}>{hint}</div>}
       </div>
@@ -405,12 +280,8 @@ export function CsvDropZone({ accept, onChange, title, description, hint }) {
   )
 }
 
-// ─────────────────────────────────────────
-// ESCUDO UPLOAD
-// ─────────────────────────────────────────
 export function EscudoUpload({ escudo, onChange, onRemove }) {
   const [drag, setDrag] = useState(false)
-
   function handleFile(e) {
     const file = e.target.files[0]; if (!file) return
     if (file.size > 2 * 1024 * 1024) { alert('El archivo supera 2 MB'); return }
@@ -420,54 +291,37 @@ export function EscudoUpload({ escudo, onChange, onRemove }) {
     reader.readAsDataURL(file)
     e.target.value = ''
   }
-
   return (
     <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
       <div style={{
-        width: 88, height: 88, borderRadius: 14, flexShrink: 0,
-        background: 'var(--light)', border: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'hidden',
+        width: 88, height: 88, borderRadius: 14, flexShrink: 0, background: 'var(--light)', border: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
       }}>
         {escudo
-          ? <img src={escudo} alt="Escudo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          : <span style={{ fontSize: 11, color: 'var(--gray2)', textAlign: 'center', padding: 8, lineHeight: 1.4 }}>Sin<br/>escudo</span>
+          ? <img src={escudo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          : <span style={{ fontSize: 11, color: 'var(--gray2)', textAlign: 'center', padding: 8, lineHeight: 1.4 }}>Sin<br/>logo</span>
         }
       </div>
-
       <div style={{ flex: 1, minWidth: 200 }}>
-        <label
-          style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            border: `2px dashed ${drag ? 'var(--red)' : 'var(--border)'}`,
-            borderRadius: 10, padding: '14px 16px', cursor: 'pointer',
-            background: drag ? 'var(--red-light)' : 'var(--light)',
-            transition: 'all 0.2s', position: 'relative', marginBottom: 8,
-          }}
-          onDragOver={e => { e.preventDefault(); setDrag(true) }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) handleFile({ target: { files: [f] } }) }}
-        >
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 12, border: `2px dashed ${drag ? 'var(--red)' : 'var(--border)'}`,
+          borderRadius: 10, padding: '14px 16px', cursor: 'pointer', background: drag ? 'var(--red-light)' : 'var(--light)',
+          transition: 'all 0.2s', position: 'relative', marginBottom: 8,
+        }}
+          onDragOver={e => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)}
+          onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) handleFile({ target: { files: [f] } }) }}>
           <span style={{ fontSize: 22, flexShrink: 0 }}>🖼️</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)' }}>
-              {escudo ? 'Cambiar imagen del escudo' : 'Seleccionar imagen del escudo'}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--gray)', marginTop: 2 }}>
-              PNG, JPG o SVG recomendado · Máx. 2 MB
-            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)' }}>{escudo ? 'Cambiar logo' : 'Seleccionar logo'}</div>
+            <div style={{ fontSize: 11, color: 'var(--gray)', marginTop: 2 }}>PNG, JPG o SVG recomendado · Máx. 2 MB</div>
           </div>
-          <input type="file" accept="image/*" onChange={handleFile}
-            style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
+          <input type="file" accept="image/*" onChange={handleFile} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
         </label>
         {escudo && (
           <button onClick={onRemove} style={{
-            padding: '5px 12px', background: 'var(--light)', border: '1px solid var(--border)',
-            borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font)',
-            color: 'var(--gray)', transition: 'all 0.15s',
-          }}>
-            Quitar escudo
-          </button>
+            padding: '5px 12px', background: 'var(--light)', border: '1px solid var(--border)', borderRadius: 7,
+            fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font)', color: 'var(--gray)', transition: 'all 0.15s',
+          }}>Quitar logo</button>
         )}
       </div>
     </div>

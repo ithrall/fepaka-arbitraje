@@ -36,15 +36,16 @@ export default function Login() {
               margin: '0 auto 14px', overflow: 'hidden',
             }}>
               {config.escudo
-                ? <img src={config.escudo} alt="Escudo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                ? <img src={config.escudo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 : <span style={{ fontSize: 30 }}>🥋</span>
               }
             </div>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 6vw, 24px)', color: 'white', letterSpacing: '3px' }}>
               {config.fedNombre}
             </h1>
+            {/* FIX: subtítulo configurable en vez de texto fijo */}
             <p style={{ fontSize: 11, color: 'var(--gray2)', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: 4 }}>
-              Gestión de Arbitraje
+              {config.tituloApp}
             </p>
           </div>
 

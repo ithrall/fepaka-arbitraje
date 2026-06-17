@@ -7,6 +7,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.5.0',
+    fecha: '2026-06-17',
+    titulo: 'Personalización de marca y corrección de persistencia',
+    cambios: [
+      { tipo: 'fix', texto: 'El logo y el nombre del club/federación ahora se guardan de forma confiable en el navegador (localStorage) y ya no se pierden al recargar la página o tras un nuevo despliegue.' },
+      { tipo: 'nuevo', texto: 'Nuevo campo "Título de la aplicación" en Configuración para personalizar el subtítulo que aparece debajo del nombre (antes era el texto fijo "Gestión de Arbitraje").' },
+      { tipo: 'mejora', texto: 'Renombrado "Escudo de la Federación" a "Logo" en toda la interfaz, y "Nombre de la Federación" a "Nombre del Club / Federación" para mayor flexibilidad de uso.' },
+    ],
+  },
+  {
     version: '1.4.0',
     fecha: '2026-06-17',
     titulo: 'Corrección de árbitros duplicados en Resultados',

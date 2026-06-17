@@ -919,19 +919,27 @@ export default function Admin() {
             />
             {configTab === 'general' && (
               <>
-                <Card title="ESCUDO DE LA FEDERACIÓN" subtitle="El escudo aparece en el login y en el encabezado de todas las páginas">
+                <Card title="LOGO" subtitle="El logo aparece en el login y en el encabezado de todas las páginas">
                   <EscudoUpload
                     escudo={config.escudo}
-                    onChange={data => { updateConfig({ escudo: data }); toast.success('✓ Escudo actualizado') }}
-                    onRemove={() => { updateConfig({ escudo: null }); toast.success('Escudo eliminado') }}
+                    onChange={data => { updateConfig({ escudo: data }); toast.success('✓ Logo actualizado') }}
+                    onRemove={() => { updateConfig({ escudo: null }); toast.success('Logo eliminado') }}
                   />
                 </Card>
-                <Card title="NOMBRE DE LA FEDERACIÓN">
+                <Card title="NOMBRE DEL CLUB / FEDERACIÓN">
                   <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ fedNombre: fd.get('fed_nombre') || 'FEPAKA' }); toast.success('✓ Configuración guardada') }}>
                     <Field label="Nombre en el encabezado">
                       <Input name="fed_nombre" defaultValue={config.fedNombre} style={{ fontSize:15,fontWeight:500 }} />
                     </Field>
                     <Button type="submit" variant="primary">Guardar configuración</Button>
+                  </form>
+                </Card>
+                <Card title="TÍTULO DE LA APLICACIÓN" subtitle="Texto que aparece debajo del nombre, por ejemplo 'Gestión de Arbitraje'">
+                  <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ tituloApp: fd.get('titulo_app') || 'Gestión de Arbitraje' }); toast.success('✓ Título actualizado') }}>
+                    <Field label="Subtítulo / descripción de la app">
+                      <Input name="titulo_app" defaultValue={config.tituloApp} style={{ fontSize:14 }} />
+                    </Field>
+                    <Button type="submit" variant="primary">Guardar título</Button>
                   </form>
                 </Card>
               </>
