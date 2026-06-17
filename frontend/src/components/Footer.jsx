@@ -1,3 +1,5 @@
+import { VERSION_ACTUAL } from '../utils/changelog'
+
 export default function Footer() {
   const year = new Date().getFullYear()
   return (
@@ -16,7 +18,7 @@ export default function Footer() {
         onMouseLeave={e => e.target.style.textDecoration = 'none'}>
         s2techgroup.net
       </a>
-      {' '}· v1.0.0
+      {' '}· v{VERSION_ACTUAL}
     </footer>
   )
 }

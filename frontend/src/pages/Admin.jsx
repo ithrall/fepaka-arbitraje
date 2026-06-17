@@ -10,6 +10,8 @@ import api from '../api'
 import { CRITERIOS, LICENCIAS, ESTADOS, nombreCompleto } from '../utils/criterios'
 import EstadisticasGlobales from '../components/EstadisticasGlobales'
 import PapeleraAuditoria from '../components/PapeleraAuditoria'
+import HistorialVersiones from '../components/HistorialVersiones'
+import { VERSION_ACTUAL } from '../utils/changelog'
 
 export default function Admin() {
   const { config, updateConfig } = useApp()
@@ -20,6 +22,7 @@ export default function Admin() {
   const [activeEvento, setActiveEvento] = useState(null)
   const [activeSub, setActiveSub] = useState(null)
   const [activeGlobal, setActiveGlobal] = useState(null)
+  const [configTab, setConfigTab] = useState('general')
   const [showNewEvento, setShowNewEvento] = useState(false)
 
   // ── Datos globales ──
@@ -903,23 +906,38 @@ export default function Admin() {
         {/* ── CONFIGURACIÓN ── */}
         {activeGlobal === 'config' && (
           <div>
-            <PageHeader title="CONFIGURACIÓN" subtitle="Personaliza la apariencia del sistema" />
-            <Card title="ESCUDO DE LA FEDERACIÓN" subtitle="El escudo aparece en el login y en el encabezado de todas las páginas">
-              <EscudoUpload
-                escudo={config.escudo}
-                onChange={data => { updateConfig({ escudo: data }); toast.success('✓ Escudo actualizado') }}
-                onRemove={() => { updateConfig({ escudo: null }); toast.success('Escudo eliminado') }}
-              />
-            </Card>
-            <Card title="NOMBRE DE LA FEDERACIÓN">
-              <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ fedNombre: fd.get('fed_nombre') || 'FEPAKA' }); toast.success('✓ Configuración guardada') }}>
-                <Field label="Nombre en el encabezado">
-                  <Input name="fed_nombre" defaultValue={config.fedNombre} style={{ fontSize:15,fontWeight:500 }} />
-                </Field>
-                <Button type="submit" variant="primary">Guardar configuración</Button>
-              </form>
-            </Card>
-            <PapeleraAuditoria />
+            <PageHeader title="CONFIGURACIÓN" subtitle="Personaliza la apariencia del sistema"
+              action={
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button variant={configTab === 'general' ? 'primary' : 'secondary'} size="sm" onClick={() => setConfigTab('general')}>General</Button>
+                  <Button variant={configTab === 'papelera' ? 'primary' : 'secondary'} size="sm" onClick={() => setConfigTab('papelera')}>Papelera</Button>
+                  <Button variant={configTab === 'version' ? 'primary' : 'secondary'} size="sm" onClick={() => setConfigTab('version')}>
+                    Versión (v{VERSION_ACTUAL})
+                  </Button>
+                </div>
+              }
+            />
+            {configTab === 'general' && (
+              <>
+                <Card title="ESCUDO DE LA FEDERACIÓN" subtitle="El escudo aparece en el login y en el encabezado de todas las páginas">
+                  <EscudoUpload
+                    escudo={config.escudo}
+                    onChange={data => { updateConfig({ escudo: data }); toast.success('✓ Escudo actualizado') }}
+                    onRemove={() => { updateConfig({ escudo: null }); toast.success('Escudo eliminado') }}
+                  />
+                </Card>
+                <Card title="NOMBRE DE LA FEDERACIÓN">
+                  <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.target); updateConfig({ fedNombre: fd.get('fed_nombre') || 'FEPAKA' }); toast.success('✓ Configuración guardada') }}>
+                    <Field label="Nombre en el encabezado">
+                      <Input name="fed_nombre" defaultValue={config.fedNombre} style={{ fontSize:15,fontWeight:500 }} />
+                    </Field>
+                    <Button type="submit" variant="primary">Guardar configuración</Button>
+                  </form>
+                </Card>
+              </>
+            )}
+            {configTab === 'papelera' && <PapeleraAuditoria />}
+            {configTab === 'version' && <HistorialVersiones />}
           </div>
         )}
 
