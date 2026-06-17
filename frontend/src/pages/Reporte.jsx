@@ -49,37 +49,28 @@ export default function Reporte() {
 
   const footerText = `${config.fedNombre || 'FEPAKA'} — Reporte de ${arbitro ? nombreCompleto(arbitro) : ''} · © ${year} S2TechGroup · s2techgroup.net · v1.0.0`
 
+  // Bloque del footer reutilizado: lo insertamos repetido dentro de cada
+  // sección de evento Y al final, así garantizamos que aparezca en cada
+  // hoja sin depender del header/footer del navegador (que no es controlable).
+  const FooterBloque = ({ mostrarSiempre }) => (
+    <div className={mostrarSiempre ? '' : 'reporte-footer-repeat'} style={{
+      borderTop: '1px solid #E2E8F0', marginTop: 16, paddingTop: 8,
+      fontSize: 9, color: '#94A3B8', textAlign: 'center',
+    }}>
+      {footerText}
+    </div>
+  )
+
   return (
     <>
-      {/* CSS de impresión: el footer fijo SÍ se repite en cada hoja con este patrón */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          html, body { margin: 0; height: auto; }
-          @page {
-            size: letter;
-            margin: 16mm 16mm 20mm 16mm;
-          }
-          .print-footer {
-            position: fixed;
-            bottom: 0mm;
-            left: 0; right: 0;
-            display: flex !important;
-          }
-        }
-        @media screen {
-          .print-footer { display: none; }
+          html, body { margin: 0; }
+          @page { size: letter; margin: 16mm 16mm 16mm 16mm; }
+          .evento-bloque { page-break-inside: avoid; page-break-after: auto; }
         }
       `}</style>
-
-      {/* Footer fijo, repetido en cada página al imprimir */}
-      <div className="print-footer no-print-hide" style={{
-        textAlign: 'center', fontSize: 8.5, color: '#94A3B8',
-        padding: '4px 16px', borderTop: '1px solid #E2E8F0',
-        background: 'white', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {footerText}
-      </div>
 
       {/* Barra de acción — solo en pantalla */}
       <div className="no-print" style={{
@@ -98,7 +89,7 @@ export default function Reporte() {
           cursor: 'pointer', fontFamily: 'var(--font)',
         }}>🖨 Imprimir / PDF</button>
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-          Para guardar como PDF: Imprimir → Destino: "Guardar como PDF" → desactiva "Encabezados y pies de página"
+          En el diálogo de impresión, desactiva "Encabezados y pies de página" para una hoja limpia
         </span>
       </div>
 
@@ -145,10 +136,11 @@ export default function Reporte() {
           </div>
         )}
 
+        {/* Cada bloque de evento es una "página lógica": tabla + su propio footer repetido */}
         {Object.entries(porEvento).map(([evId, ev]) => {
           const crits = CRITERIOS[ev.modalidad] || CRITERIOS.kumite
           return (
-            <div key={evId} style={{ marginBottom: 28, pageBreakInside: 'avoid' }}>
+            <div key={evId} className="evento-bloque" style={{ marginBottom: 28 }}>
               <div style={{ background: '#1E293B', color: 'white', borderRadius: '8px 8px 0 0', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 15, letterSpacing: 1 }}>{ev.evento_nombre}</div>
@@ -227,18 +219,21 @@ export default function Reporte() {
                   )
                 })()}
               </table>
+
+              {/* Footer repetido después de CADA bloque de evento — visible también al imprimir */}
+              <FooterBloque />
             </div>
           )
         })}
 
-        {/* Pie de página visible en pantalla normal */}
-        <div className="no-print" style={{ marginTop: 32, borderTop: '1px solid #E2E8F0', paddingTop: 12, fontSize: 10, color: '#94A3B8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+        {/* Pie de página final, con fecha de generación */}
+        <div style={{ marginTop: 16, borderTop: '1px solid #E2E8F0', paddingTop: 12, fontSize: 10, color: '#94A3B8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
           <span>
             © {year} S2TechGroup · Todos los derechos reservados ·{' '}
             <a href="https://s2techgroup.net" target="_blank" rel="noopener noreferrer" style={{ color: '#94A3B8' }}>s2techgroup.net</a>
             {' '}· v1.0.0
           </span>
-          <span>Generado: {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+          <span className="no-print">Generado: {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
         </div>
       </div>
     </>
