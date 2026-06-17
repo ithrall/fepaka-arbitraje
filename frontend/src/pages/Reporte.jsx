@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { Spinner } from '../components/ui'
@@ -16,9 +16,7 @@ export default function Reporte() {
 
   const year = new Date().getFullYear()
 
-  useEffect(() => {
-    cargarDatos()
-  }, [arbitroId])
+  useEffect(() => { cargarDatos() }, [arbitroId])
 
   async function cargarDatos() {
     try {
@@ -33,9 +31,7 @@ export default function Reporte() {
     finally { setLoading(false) }
   }
 
-  function handlePrint() {
-    window.print()
-  }
+  function handlePrint() { window.print() }
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
@@ -45,19 +41,46 @@ export default function Reporte() {
 
   const porEvento = historial.reduce((acc, e) => {
     if (!acc[e.evento_id]) {
-      acc[e.evento_id] = {
-        evento_nombre: e.evento_nombre,
-        fecha: e.fecha,
-        modalidad: e.modalidad,
-        evaluaciones: []
-      }
+      acc[e.evento_id] = { evento_nombre: e.evento_nombre, fecha: e.fecha, modalidad: e.modalidad, evaluaciones: [] }
     }
     acc[e.evento_id].evaluaciones.push(e)
     return acc
   }, {})
 
+  const footerText = `${config.fedNombre || 'FEPAKA'} — Reporte de ${arbitro ? nombreCompleto(arbitro) : ''} · © ${year} S2TechGroup · s2techgroup.net · v1.0.0`
+
   return (
     <>
+      {/* CSS de impresión: el footer fijo SÍ se repite en cada hoja con este patrón */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          html, body { margin: 0; height: auto; }
+          @page {
+            size: letter;
+            margin: 16mm 16mm 20mm 16mm;
+          }
+          .print-footer {
+            position: fixed;
+            bottom: 0mm;
+            left: 0; right: 0;
+            display: flex !important;
+          }
+        }
+        @media screen {
+          .print-footer { display: none; }
+        }
+      `}</style>
+
+      {/* Footer fijo, repetido en cada página al imprimir */}
+      <div className="print-footer no-print-hide" style={{
+        textAlign: 'center', fontSize: 8.5, color: '#94A3B8',
+        padding: '4px 16px', borderTop: '1px solid #E2E8F0',
+        background: 'white', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {footerText}
+      </div>
+
       {/* Barra de acción — solo en pantalla */}
       <div className="no-print" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
@@ -75,27 +98,15 @@ export default function Reporte() {
           cursor: 'pointer', fontFamily: 'var(--font)',
         }}>🖨 Imprimir / PDF</button>
         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-          Para guardar como PDF: Imprimir → Destino: "Guardar como PDF"
+          Para guardar como PDF: Imprimir → Destino: "Guardar como PDF" → desactiva "Encabezados y pies de página"
         </span>
       </div>
 
       {/* Contenido imprimible */}
       <div style={{
-        maxWidth: 750, margin: '0 auto', padding: '70px 32px 40px',
+        maxWidth: 750, margin: '0 auto', padding: '70px 32px 50px',
         fontFamily: 'DM Sans, sans-serif', fontSize: 13, color: '#0F172A',
       }}>
-        <style>{`
-          @media print {
-            .no-print { display: none !important; }
-            body { margin: 0; }
-            @page { size: letter; margin: 18mm 16mm 22mm 16mm; }
-            .reporte-footer-print { display: block; }
-          }
-          @media screen {
-            .reporte-footer-print { display: none; }
-          }
-        `}</style>
-
         {/* Encabezado con escudo de la organización */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '2px solid #C8102E', paddingBottom: 16, marginBottom: 20 }}>
           {config.escudo ? (
@@ -113,7 +124,6 @@ export default function Reporte() {
           </div>
         </div>
 
-        {/* Datos del árbitro */}
         {arbitro && (
           <div style={{ background: '#F1F5F9', borderRadius: 10, padding: '14px 18px', marginBottom: 24 }}>
             <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 18, letterSpacing: 1, marginBottom: 8 }}>
@@ -135,25 +145,18 @@ export default function Reporte() {
           </div>
         )}
 
-        {/* Historial por evento */}
         {Object.entries(porEvento).map(([evId, ev]) => {
           const crits = CRITERIOS[ev.modalidad] || CRITERIOS.kumite
           return (
             <div key={evId} style={{ marginBottom: 28, pageBreakInside: 'avoid' }}>
               <div style={{ background: '#1E293B', color: 'white', borderRadius: '8px 8px 0 0', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 15, letterSpacing: 1 }}>
-                    {ev.evento_nombre}
-                  </div>
+                  <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 15, letterSpacing: 1 }}>{ev.evento_nombre}</div>
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
                     {ev.fecha ? new Date(ev.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
                   </div>
                 </div>
-                <span style={{
-                  background: ev.modalidad === 'kata' ? '#3B82F6' : '#F5A623',
-                  color: 'white', padding: '2px 10px', borderRadius: 20,
-                  fontSize: 11, fontWeight: 600,
-                }}>
+                <span style={{ background: ev.modalidad === 'kata' ? '#3B82F6' : '#F5A623', color: 'white', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
                   {ev.modalidad?.toUpperCase()}
                 </span>
               </div>
@@ -161,20 +164,12 @@ export default function Reporte() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#F1F5F9' }}>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #E2E8F0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748B' }}>
-                      Evaluador / Área
-                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #E2E8F0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748B' }}>Evaluador / Área</th>
                     {crits.map(c => (
-                      <th key={c.key} style={{ padding: '8px 8px', textAlign: 'center', borderBottom: '1px solid #E2E8F0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748B', whiteSpace: 'nowrap' }}>
-                        {c.short}
-                      </th>
+                      <th key={c.key} style={{ padding: '8px 8px', textAlign: 'center', borderBottom: '1px solid #E2E8F0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748B', whiteSpace: 'nowrap' }}>{c.short}</th>
                     ))}
-                    <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #E2E8F0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748B' }}>
-                      Prom.
-                    </th>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #E2E8F0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748B' }}>
-                      Comentario
-                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #E2E8F0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748B' }}>Prom.</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #E2E8F0', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748B' }}>Comentario</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -183,7 +178,6 @@ export default function Reporte() {
                     const prom = vals.length ? (vals.reduce((a,b) => a+b, 0) / vals.length).toFixed(2) : '—'
                     const promNum = parseFloat(prom)
                     const promColor = promNum >= 4 ? '#10B981' : promNum >= 3 ? '#F59E0B' : '#EF4444'
-
                     return (
                       <tr key={e.id} style={{ background: i % 2 === 0 ? 'white' : '#F8FAFC' }}>
                         <td style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0' }}>
@@ -191,9 +185,7 @@ export default function Reporte() {
                           {e.area_nombre && <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 1 }}>{e.area_nombre}</div>}
                         </td>
                         {crits.map(c => (
-                          <td key={c.key} style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E2E8F0' }}>
-                            {e[c.key] ? parseFloat(e[c.key]).toFixed(1) : '—'}
-                          </td>
+                          <td key={c.key} style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #E2E8F0' }}>{e[c.key] ? parseFloat(e[c.key]).toFixed(1) : '—'}</td>
                         ))}
                         <td style={{ padding: '8px 12px', textAlign: 'center', borderBottom: '1px solid #E2E8F0' }}>
                           <span style={{ fontWeight: 700, color: promColor, fontSize: 13 }}>{prom}</span>
@@ -219,13 +211,10 @@ export default function Reporte() {
                     ? (promsCrit.filter(v => v !== null).reduce((a,b) => a+b, 0) / promsCrit.filter(v => v !== null).length).toFixed(2)
                     : '—'
                   const promColor = parseFloat(promTotal) >= 4 ? '#10B981' : parseFloat(promTotal) >= 3 ? '#F59E0B' : '#EF4444'
-
                   return (
                     <tfoot>
                       <tr style={{ background: '#1E293B' }}>
-                        <td style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          Promedio del evento
-                        </td>
+                        <td style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Promedio del evento</td>
                         {promsEvento.map((p, i) => (
                           <td key={i} style={{ padding: '8px', textAlign: 'center', color: 'white', fontWeight: 600 }}>{p}</td>
                         ))}
@@ -242,7 +231,7 @@ export default function Reporte() {
           )
         })}
 
-        {/* Pie de página — visible en pantalla, al final del contenido */}
+        {/* Pie de página visible en pantalla normal */}
         <div className="no-print" style={{ marginTop: 32, borderTop: '1px solid #E2E8F0', paddingTop: 12, fontSize: 10, color: '#94A3B8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
           <span>
             © {year} S2TechGroup · Todos los derechos reservados ·{' '}
@@ -251,16 +240,6 @@ export default function Reporte() {
           </span>
           <span>Generado: {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
         </div>
-      </div>
-
-      {/* Pie de página fijo — se repite en CADA hoja impresa */}
-      <div className="reporte-footer-print" style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        textAlign: 'center', fontSize: 9, color: '#94A3B8',
-        padding: '6px 16px', borderTop: '1px solid #E2E8F0',
-      }}>
-        {config.fedNombre || 'FEPAKA'} — Reporte de {arbitro ? nombreCompleto(arbitro) : ''} ·
-        © {year} S2TechGroup · s2techgroup.net · v1.0.0
       </div>
     </>
   )
